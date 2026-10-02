@@ -218,7 +218,7 @@ export function DataTable() {
               top: 0,
               background: 'var(--bg-surface)',
               zIndex: 10,
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+              boxShadow: 'var(--shadow-sm)',
             }}
           >
             <tr
@@ -283,11 +283,12 @@ export function DataTable() {
                     key={r.id}
                     onClick={() => setSelectedRecordId(isSelected ? null : r.id)}
                     style={{
-                      borderBottom: '1px solid rgba(148, 163, 184, 0.07)',
+                      height: '42px',
+                      borderBottom: '1px solid var(--border)',
                       background: isSelected
-                        ? 'rgba(56, 189, 248, 0.16)'
+                        ? 'var(--primary-glow)'
                         : isBad
-                        ? 'rgba(239, 68, 68, 0.03)'
+                        ? 'rgba(239, 68, 68, 0.04)'
                         : 'transparent',
                       borderLeft: isSelected
                         ? '3px solid var(--primary-light)'
@@ -468,7 +469,7 @@ export function DataTable() {
                             r.s16 === null
                               ? 'var(--quality-bad)'
                               : r.s16 > 0
-                              ? '#38bdf8'
+                              ? 'var(--primary-light)'
                               : 'var(--text-muted)',
                         }}
                       >

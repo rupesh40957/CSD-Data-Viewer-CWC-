@@ -257,9 +257,9 @@ export function FileSummaryCard() {
                 fontSize: '0.75rem',
                 padding: '2px 8px',
                 borderRadius: '4px',
-                background: 'rgba(168, 85, 247, 0.15)',
-                color: '#d8b4fe',
-                border: '1px solid rgba(168, 85, 247, 0.3)',
+                background: 'var(--tag-purple-bg)',
+                color: 'var(--tag-purple)',
+                border: '1px solid var(--tag-purple-border)',
               }}
             >
               Prefix: » (0xBB)

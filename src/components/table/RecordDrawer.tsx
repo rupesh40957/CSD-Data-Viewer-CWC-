@@ -55,7 +55,7 @@ export function RecordDrawer() {
         maxWidth: '480px',
         background: 'var(--bg-card)',
         borderLeft: '1px solid var(--border)',
-        boxShadow: '-8px 0 32px rgba(0, 0, 0, 0.5)',
+        boxShadow: 'var(--shadow-lg)',
         zIndex: 50,
         display: 'flex',
         flexDirection: 'column',
@@ -332,21 +332,21 @@ export function RecordDrawer() {
             FRAME CALIBRATION & H CODE
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
-            <div style={{ textAlign: 'center', background: 'rgba(0,0,0,0.2)', padding: '6px', borderRadius: '4px' }}>
+            <div style={{ textAlign: 'center', background: 'var(--bg-subtle)', border: '1px solid var(--border)', padding: '6px', borderRadius: '4px' }}>
               <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>c1</div>
-              <div className="mono-font" style={{ fontSize: '0.85rem', fontWeight: 600 }}>{record.c1}</div>
+              <div className="mono-font" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>{record.c1}</div>
             </div>
-            <div style={{ textAlign: 'center', background: 'rgba(0,0,0,0.2)', padding: '6px', borderRadius: '4px' }}>
+            <div style={{ textAlign: 'center', background: 'var(--bg-subtle)', border: '1px solid var(--border)', padding: '6px', borderRadius: '4px' }}>
               <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>c2</div>
-              <div className="mono-font" style={{ fontSize: '0.85rem', fontWeight: 600 }}>{record.c2}</div>
+              <div className="mono-font" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>{record.c2}</div>
             </div>
-            <div style={{ textAlign: 'center', background: 'rgba(0,0,0,0.2)', padding: '6px', borderRadius: '4px' }}>
+            <div style={{ textAlign: 'center', background: 'var(--bg-subtle)', border: '1px solid var(--border)', padding: '6px', borderRadius: '4px' }}>
               <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>c3</div>
-              <div className="mono-font" style={{ fontSize: '0.85rem', fontWeight: 600 }}>{record.c3}</div>
+              <div className="mono-font" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)' }}>{record.c3}</div>
             </div>
-            <div style={{ textAlign: 'center', background: 'rgba(0,0,0,0.2)', padding: '6px', borderRadius: '4px' }}>
+            <div style={{ textAlign: 'center', background: 'var(--bg-subtle)', border: '1px solid var(--border)', padding: '6px', borderRadius: '4px' }}>
               <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>H Code</div>
-              <div className="mono-font" style={{ fontSize: '0.85rem', fontWeight: 700, color: '#38bdf8' }}>
+              <div className="mono-font" style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--primary-light)' }}>
                 {record.h ?? '--'}
               </div>
             </div>
@@ -386,7 +386,7 @@ export function RecordDrawer() {
                   style={{
                     padding: '4px 6px',
                     borderRadius: '4px',
-                    background: isDollar ? 'var(--quality-bad-bg)' : 'rgba(0, 0, 0, 0.25)',
+                    background: isDollar ? 'var(--quality-bad-bg)' : 'var(--bg-subtle)',
                     border: isDollar ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid var(--border)',
                     textAlign: 'center',
                   }}
@@ -453,7 +453,7 @@ export function RecordDrawer() {
           style={{
             padding: '12px',
             borderRadius: 'var(--radius-md)',
-            background: 'rgba(10, 15, 29, 0.95)',
+            background: 'var(--bg-surface)',
             border: '1px solid var(--border)',
           }}
         >
@@ -485,8 +485,8 @@ export function RecordDrawer() {
               wordBreak: 'break-all',
               padding: '8px',
               borderRadius: '4px',
-              background: 'rgba(0, 0, 0, 0.4)',
-              border: '1px solid rgba(148, 163, 184, 0.1)',
+              background: 'var(--bg-subtle)',
+              border: '1px solid var(--border)',
             }}
           >
             {record.rawLine || 'Raw frame not preserved'}

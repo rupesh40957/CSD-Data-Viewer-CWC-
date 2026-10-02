@@ -180,7 +180,7 @@ export function TopStationsTable() {
                         fontWeight: 600,
                         color: isMapped ? 'var(--primary-light)' : 'var(--text-dim)',
                         fontSize: '0.8rem',
-                        background: 'rgba(15, 23, 42, 0.4)',
+                        background: 'var(--bg-surface)',
                         padding: '2px 6px',
                         borderRadius: '4px',
                         border: '1px solid rgba(148, 163, 184, 0.15)',

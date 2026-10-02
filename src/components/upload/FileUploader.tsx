@@ -277,7 +277,7 @@ export function FileUploader({ isModal = false, onClose }: FileUploaderProps) {
                 borderRadius: 'var(--radius-lg)',
                 padding: '44px 24px',
                 textAlign: 'center',
-                background: isDragOver ? 'rgba(56, 189, 248, 0.08)' : 'rgba(15, 23, 42, 0.4)',
+                background: isDragOver ? 'var(--primary-glow)' : 'var(--bg-surface)',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
                 boxShadow: isDragOver ? '0 0 25px rgba(56, 189, 248, 0.3)' : 'none',
@@ -530,7 +530,7 @@ export function FileUploader({ isModal = false, onClose }: FileUploaderProps) {
                 margin: '0 auto 20px',
                 height: '8px',
                 borderRadius: '4px',
-                background: 'rgba(15, 23, 42, 0.6)',
+                background: 'var(--bg-subtle)',
                 overflow: 'hidden',
                 border: '1px solid var(--border)',
               }}
@@ -802,7 +802,7 @@ export function FileUploader({ isModal = false, onClose }: FileUploaderProps) {
               style={{
                 padding: '10px 14px',
                 borderRadius: 'var(--radius-md)',
-                background: 'rgba(15, 23, 42, 0.5)',
+                background: 'var(--bg-surface)',
                 border: '1px solid var(--border)',
                 display: 'flex',
                 alignItems: 'center',

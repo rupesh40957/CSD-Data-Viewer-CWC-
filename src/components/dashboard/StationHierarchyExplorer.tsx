@@ -297,7 +297,7 @@ export function StationHierarchyExplorer() {
         <div
           style={{
             borderRight: '1px solid var(--border)',
-            background: 'rgba(10, 17, 34, 0.4)',
+            background: 'var(--bg-subtle)',
             display: 'flex',
             flexDirection: 'column',
             maxHeight: '680px',
@@ -345,7 +345,7 @@ export function StationHierarchyExplorer() {
                           padding: '2px 8px',
                           borderRadius: 'var(--radius-full)',
                           background: 'rgba(16, 185, 129, 0.15)',
-                          color: '#34d399',
+                          color: 'var(--quality-good)',
                           fontWeight: 600,
                         }}
                       >

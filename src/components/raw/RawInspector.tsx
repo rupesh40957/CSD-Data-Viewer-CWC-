@@ -262,7 +262,7 @@ export function RawInspector() {
                     border: '1px solid var(--border)',
                     overflowX: 'auto',
                     whiteSpace: 'pre',
-                    color: isBad ? '#fca5a5' : 'var(--text-muted)',
+                    color: isBad ? 'var(--quality-bad)' : 'var(--text-muted)',
                     lineHeight: '1.4',
                   }}
                 >
@@ -277,7 +277,7 @@ export function RawInspector() {
                         key={eIdx}
                         style={{
                           fontSize: '0.68rem',
-                          color: '#f87171',
+                          color: 'var(--quality-bad)',
                           background: 'rgba(239, 68, 68, 0.1)',
                           padding: '1px 6px',
                           borderRadius: '3px',

@@ -252,8 +252,8 @@ export function StationHierarchyTree({
             <span>➔</span>
             <span
               style={{
-                background: 'rgba(168, 85, 247, 0.12)',
-                color: '#c084fc',
+                background: 'var(--tag-purple-bg)',
+                color: 'var(--tag-purple)',
                 padding: '1px 6px',
                 borderRadius: '4px',
                 fontWeight: 600,
@@ -264,8 +264,8 @@ export function StationHierarchyTree({
             <span>➔</span>
             <span
               style={{
-                background: 'rgba(34, 197, 94, 0.12)',
-                color: '#4ade80',
+                background: 'var(--tag-green-bg)',
+                color: 'var(--tag-green)',
                 padding: '1px 6px',
                 borderRadius: '4px',
                 fontWeight: 600,
@@ -276,8 +276,8 @@ export function StationHierarchyTree({
             <span>➔</span>
             <span
               style={{
-                background: 'rgba(245, 158, 11, 0.12)',
-                color: '#fbbf24',
+                background: 'var(--tag-amber-bg)',
+                color: 'var(--tag-amber)',
                 padding: '1px 6px',
                 borderRadius: '4px',
                 fontWeight: 600,

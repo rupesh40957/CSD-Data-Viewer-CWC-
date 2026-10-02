@@ -40,6 +40,17 @@
   --border: rgba(148, 163, 184, 0.12);
   --border-focus: rgba(56, 189, 248, 0.4);
 
+  /* Categorization / Hierarchy Tags - Dark Mode */
+  --tag-purple: #c084fc;
+  --tag-purple-bg: rgba(168, 85, 247, 0.15);
+  --tag-purple-border: rgba(168, 85, 247, 0.3);
+  --tag-green: #4ade80;
+  --tag-green-bg: rgba(34, 197, 94, 0.15);
+  --tag-green-border: rgba(34, 197, 94, 0.3);
+  --tag-amber: #fbbf24;
+  --tag-amber-bg: rgba(245, 158, 11, 0.15);
+  --tag-amber-border: rgba(245, 158, 11, 0.3);
+
   /* MongoDB Atlas Navigation Design Tokens */
   --atlas-bg: #001e2b;
   --atlas-subtle: #082836;
@@ -107,6 +118,17 @@
 
   --border: rgba(148, 163, 184, 0.25);
   --border-focus: rgba(2, 132, 199, 0.5);
+
+  /* Categorization / Hierarchy Tags - Light Mode (High Contrast) */
+  --tag-purple: #7e22ce;
+  --tag-purple-bg: rgba(126, 34, 206, 0.08);
+  --tag-purple-border: rgba(126, 34, 206, 0.25);
+  --tag-green: #15803d;
+  --tag-green-bg: rgba(21, 128, 61, 0.08);
+  --tag-green-border: rgba(21, 128, 61, 0.25);
+  --tag-amber: #b45309;
+  --tag-amber-bg: rgba(180, 83, 9, 0.08);
+  --tag-amber-border: rgba(180, 83, 9, 0.25);
 
   /* MongoDB Atlas Navigation Design Tokens - Light Mode */
   --atlas-bg: #ffffff;
