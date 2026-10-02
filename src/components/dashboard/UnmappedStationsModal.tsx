@@ -138,7 +138,7 @@ export function UnmappedStationsModal() {
         <div
           style={{
             padding: '14px 24px',
-            background: 'rgba(13, 21, 39, 0.6)',
+            background: 'var(--bg-subtle)',
             borderBottom: '1px solid var(--border)',
             display: 'flex',
             alignItems: 'center',

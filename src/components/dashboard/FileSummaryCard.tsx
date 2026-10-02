@@ -48,8 +48,8 @@ export function FileSummaryCard() {
         width: '100%',
         position: 'relative',
         overflow: 'hidden',
-        border: '1px solid rgba(56, 189, 248, 0.2)',
-        background: 'linear-gradient(180deg, rgba(17, 28, 53, 0.85) 0%, rgba(13, 21, 39, 0.95) 100%)',
+        border: '1px solid var(--border)',
+        background: 'var(--bg-card)',
       }}
     >
       {/* Top Gradient Accent */}
@@ -316,7 +316,7 @@ export function FileSummaryCard() {
           marginTop: '14px',
           padding: '10px 16px',
           borderRadius: 'var(--radius-md)',
-          background: 'rgba(13, 21, 39, 0.6)',
+          background: 'var(--bg-subtle)',
           border: '1px solid var(--border)',
           display: 'flex',
           alignItems: 'center',

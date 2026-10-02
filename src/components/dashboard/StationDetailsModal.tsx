@@ -241,7 +241,7 @@ export function StationDetailsModal() {
               style={{
                 padding: '14px 16px',
                 borderRadius: 'var(--radius-md)',
-                background: 'rgba(13, 21, 39, 0.6)',
+                background: 'var(--bg-subtle)',
                 border: '1px solid var(--border)',
               }}
             >

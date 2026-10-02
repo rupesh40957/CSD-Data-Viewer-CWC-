@@ -212,7 +212,7 @@ export function StationHierarchyExplorer() {
         style={{
           padding: '16px 20px',
           borderBottom: '1px solid var(--border)',
-          background: 'rgba(17, 28, 53, 0.6)',
+          background: 'var(--bg-surface)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -538,7 +538,7 @@ export function StationHierarchyExplorer() {
                 >
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem' }}>
                     <thead>
-                      <tr style={{ background: 'rgba(17, 28, 53, 0.7)', borderBottom: '1px solid var(--border)' }}>
+                      <tr style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)' }}>
                         <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: 'var(--text-dim)' }}>
                           Parameter / Sensor
                         </th>

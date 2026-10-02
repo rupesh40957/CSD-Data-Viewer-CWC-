@@ -222,7 +222,7 @@ export function StationHierarchyTree({
           display: 'flex',
           flexDirection: 'column',
           gap: '8px',
-          background: 'rgba(17, 28, 53, 0.25)',
+          background: 'var(--bg-subtle)',
         }}
       >
         {/* Hierarchy Chain Badge as shown in Image 2 */}
@@ -956,7 +956,7 @@ export function StationHierarchyTree({
         style={{
           padding: '6px 12px',
           borderTop: '1px solid var(--border)',
-          background: 'rgba(17, 28, 53, 0.4)',
+          background: 'var(--bg-subtle)',
           fontSize: '0.72rem',
           color: 'var(--text-muted)',
           display: 'flex',
