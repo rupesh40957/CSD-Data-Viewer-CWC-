@@ -69,8 +69,8 @@ export function UnmappedStationsModal() {
           boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6)',
           border: '1px solid rgba(239, 68, 68, 0.4)',
           borderRadius: 'var(--radius-lg)',
-          overflow: 'hidden',
-          background: 'linear-gradient(180deg, rgba(17, 28, 53, 0.95) 0%, rgba(13, 21, 39, 0.98) 100%)',
+          background: 'var(--bg-card)',
+          backdropFilter: 'blur(20px)',
         }}
         onClick={(e) => e.stopPropagation()}
       >

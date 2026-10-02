@@ -509,6 +509,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const next = state.theme === 'dark' ? 'light' : 'dark';
       if (typeof document !== 'undefined') {
         document.documentElement.setAttribute('data-theme', next);
+        try {
+          localStorage.setItem('csd_theme', next);
+        } catch {}
       }
       return { theme: next };
     }),

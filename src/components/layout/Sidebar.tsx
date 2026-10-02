@@ -88,14 +88,14 @@ function AtlasSection({
         }
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Icon size={14} color="#00ed64" style={{ flexShrink: 0 }} />
+          <Icon size={14} color="var(--atlas-green)" style={{ flexShrink: 0 }} />
           <span
             style={{
               fontSize: '0.68rem',
               fontWeight: 700,
               letterSpacing: '0.07em',
               textTransform: 'uppercase',
-              color: '#00ed64',
+              color: 'var(--atlas-green)',
               fontFamily: 'var(--font-sans)',
             }}
           >
@@ -112,7 +112,7 @@ function AtlasSection({
                 padding: '1px 6px',
                 borderRadius: '9999px',
                 background: 'rgba(0, 237, 100, 0.12)',
-                color: '#00ed64',
+                color: 'var(--atlas-green)',
                 fontWeight: 600,
                 fontFamily: 'var(--font-mono)',
               }}
@@ -127,7 +127,7 @@ function AtlasSection({
               border: 'none',
               padding: '2px',
               cursor: 'pointer',
-              color: '#889397',
+              color: 'var(--atlas-text-secondary)',
               display: 'flex',
               alignItems: 'center',
             }}
@@ -197,15 +197,15 @@ function AtlasEmptyState({
           boxShadow: '0 0 20px rgba(0, 237, 100, 0.15)',
         }}
       >
-        <Database size={26} color="#00ed64" />
+        <Database size={26} color="var(--atlas-green)" />
       </div>
 
       <div>
-        <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#f9fbfa', marginBottom: '4px' }}>
+        <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--atlas-text-primary)', marginBottom: '4px' }}>
           No Telemetry Connected
         </div>
-        <div style={{ fontSize: '0.74rem', color: '#889397', lineHeight: 1.5, maxWidth: '240px' }}>
-          Select a <code style={{ color: '#00ed64', fontFamily: 'var(--font-mono)' }}>.csd</code> file or browse a local directory path to begin telemetry analysis.
+        <div style={{ fontSize: '0.74rem', color: 'var(--atlas-text-secondary)', lineHeight: 1.5, maxWidth: '240px' }}>
+          Select a <code style={{ color: 'var(--atlas-green)', fontFamily: 'var(--font-mono)' }}>.csd</code> file or browse a local directory path to begin telemetry analysis.
         </div>
       </div>
 
@@ -217,7 +217,7 @@ function AtlasEmptyState({
             background: 'rgba(0, 237, 100, 0.08)',
             border: '1px solid rgba(0, 237, 100, 0.2)',
             fontSize: '0.74rem',
-            color: '#00ed64',
+            color: 'var(--atlas-green)',
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
@@ -247,7 +247,7 @@ function AtlasEmptyState({
               gap: '8px',
               padding: '9px 16px',
               borderRadius: '6px',
-              background: '#00684a',
+              background: 'var(--atlas-green-dark)',
               color: '#ffffff',
               border: '1px solid #00ed64',
               fontSize: '0.8rem',
@@ -256,10 +256,10 @@ function AtlasEmptyState({
               boxShadow: '0 4px 14px rgba(0, 104, 74, 0.4)',
               transition: 'all 0.15s ease',
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = '#00553c')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = '#00684a')}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--atlas-green-dark)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--atlas-green-dark)')}
           >
-            <UploadCloud size={15} color="#00ed64" />
+            <UploadCloud size={15} color="var(--atlas-green)" />
             <span>Upload CSD File</span>
           </button>
 
@@ -273,18 +273,18 @@ function AtlasEmptyState({
               gap: '8px',
               padding: '8px 14px',
               borderRadius: '6px',
-              background: '#0b1a22',
-              color: '#f9fbfa',
+              background: 'var(--atlas-card)',
+              color: 'var(--atlas-text-primary)',
               border: '1px solid rgba(255, 255, 255, 0.12)',
               fontSize: '0.78rem',
               fontWeight: 500,
               cursor: 'pointer',
               transition: 'all 0.15s ease',
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#00ed64')}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--atlas-green)')}
             onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)')}
           >
-            <FolderOpen size={14} color="#00ed64" />
+            <FolderOpen size={14} color="var(--atlas-green)" />
             <span>Choose Folder</span>
           </button>
 
@@ -299,7 +299,7 @@ function AtlasEmptyState({
               padding: '7px 12px',
               borderRadius: '6px',
               background: 'transparent',
-              color: '#889397',
+              color: 'var(--atlas-text-secondary)',
               border: '1px dashed rgba(255, 255, 255, 0.15)',
               fontSize: '0.72rem',
               fontWeight: 500,
@@ -307,11 +307,11 @@ function AtlasEmptyState({
               transition: 'all 0.15s ease',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#f9fbfa';
+              e.currentTarget.style.color = 'var(--atlas-text-primary)';
               e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.color = '#889397';
+              e.currentTarget.style.color = 'var(--atlas-text-secondary)';
               e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
             }}
           >
@@ -383,7 +383,7 @@ function PathSelectorModal({
         style={{
           width: '100%',
           maxWidth: '520px',
-          background: '#001e2b',
+          background: 'var(--atlas-bg)',
           border: '1px solid rgba(0, 237, 100, 0.25)',
           borderRadius: '12px',
           boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6), 0 0 25px rgba(0, 237, 100, 0.1)',
@@ -399,12 +399,12 @@ function PathSelectorModal({
             justifyContent: 'space-between',
             padding: '14px 18px',
             borderBottom: '1px solid var(--atlas-border)',
-            background: '#0b1a22',
+            background: 'var(--atlas-card)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <FolderOpen size={18} color="#00ed64" />
-            <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#f9fbfa' }}>
+            <FolderOpen size={18} color="var(--atlas-green)" />
+            <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--atlas-text-primary)' }}>
               Choose Dataset Path or Folder
             </span>
           </div>
@@ -413,7 +413,7 @@ function PathSelectorModal({
             style={{
               background: 'none',
               border: 'none',
-              color: '#889397',
+              color: 'var(--atlas-text-secondary)',
               cursor: 'pointer',
               padding: '4px',
             }}
@@ -426,7 +426,7 @@ function PathSelectorModal({
         <div style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {discoveredFiles.length > 0 ? (
             <div>
-              <div style={{ fontSize: '0.76rem', color: '#00ed64', fontWeight: 600, marginBottom: '8px' }}>
+              <div style={{ fontSize: '0.76rem', color: 'var(--atlas-green)', fontWeight: 600, marginBottom: '8px' }}>
                 Found {discoveredFiles.length} CSD File(s) in Selected Folder:
               </div>
               <div
@@ -452,24 +452,24 @@ function PathSelectorModal({
                       justifyContent: 'space-between',
                       padding: '8px 12px',
                       borderRadius: '6px',
-                      background: '#112733',
+                      background: 'var(--atlas-surface)',
                       border: '1px solid var(--atlas-border)',
                       cursor: 'pointer',
                       transition: 'border-color 0.15s',
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#00ed64')}
+                    onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--atlas-green)')}
                     onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--atlas-border)')}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <FileText size={15} color="#00ed64" />
+                      <FileText size={15} color="var(--atlas-green)" />
                       <div>
-                        <div style={{ fontSize: '0.78rem', color: '#f9fbfa', fontWeight: 600 }}>{f.name}</div>
-                        <div style={{ fontSize: '0.65rem', color: '#889397' }}>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--atlas-text-primary)', fontWeight: 600 }}>{f.name}</div>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--atlas-text-secondary)' }}>
                           {(f.size / 1024).toFixed(1)} KB • {f.webkitRelativePath || 'Local File'}
                         </div>
                       </div>
                     </div>
-                    <span style={{ fontSize: '0.7rem', color: '#00ed64', fontWeight: 600 }}>Load &rarr;</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--atlas-green)', fontWeight: 600 }}>Load &rarr;</span>
                   </div>
                 ))}
               </div>
@@ -481,7 +481,7 @@ function PathSelectorModal({
                   display: 'block',
                   fontSize: '0.76rem',
                   fontWeight: 600,
-                  color: '#f9fbfa',
+                  color: 'var(--atlas-text-primary)',
                   marginBottom: '6px',
                 }}
               >
@@ -497,9 +497,9 @@ function PathSelectorModal({
                     flex: 1,
                     padding: '8px 12px',
                     borderRadius: '6px',
-                    background: '#112733',
+                    background: 'var(--atlas-surface)',
                     border: '1px solid rgba(255,255,255,0.12)',
-                    color: '#f9fbfa',
+                    color: 'var(--atlas-text-primary)',
                     fontSize: '0.8rem',
                     fontFamily: 'var(--font-mono)',
                     outline: 'none',
@@ -514,7 +514,7 @@ function PathSelectorModal({
                   style={{
                     padding: '8px 16px',
                     borderRadius: '6px',
-                    background: '#00684a',
+                    background: 'var(--atlas-green-dark)',
                     color: '#ffffff',
                     border: '1px solid #00ed64',
                     fontSize: '0.78rem',
@@ -754,7 +754,7 @@ export function Sidebar() {
           }}
           title="Expand Navigation"
         >
-          <Database size={18} color="#00ed64" />
+          <Database size={18} color="var(--atlas-green)" />
         </div>
 
         <div style={{ width: '28px', height: '1px', background: 'var(--atlas-border)', margin: '2px 0 6px' }} />
@@ -772,7 +772,7 @@ export function Sidebar() {
                 height: '38px',
                 borderRadius: '8px',
                 textDecoration: 'none',
-                color: isActive ? '#00ed64' : '#889397',
+                color: isActive ? 'var(--atlas-green)' : 'var(--atlas-text-secondary)',
                 background: isActive ? 'rgba(0, 237, 100, 0.12)' : 'transparent',
                 border: isActive ? '1px solid rgba(0, 237, 100, 0.25)' : '1px solid transparent',
                 display: 'flex',
@@ -797,7 +797,7 @@ export function Sidebar() {
               borderRadius: '6px',
               background: 'none',
               border: 'none',
-              color: '#889397',
+              color: 'var(--atlas-text-secondary)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -817,7 +817,7 @@ export function Sidebar() {
               borderRadius: '6px',
               background: 'none',
               border: 'none',
-              color: '#00ed64',
+              color: 'var(--atlas-green)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -915,14 +915,14 @@ export function Sidebar() {
                 justifyContent: 'center',
               }}
             >
-              <Database size={14} color="#00ed64" />
+              <Database size={14} color="var(--atlas-green)" />
             </div>
             <div>
               <span
                 style={{
                   fontSize: '0.82rem',
                   fontWeight: 800,
-                  color: '#f9fbfa',
+                  color: 'var(--atlas-text-primary)',
                   letterSpacing: '0.06em',
                 }}
               >
@@ -942,13 +942,13 @@ export function Sidebar() {
                 padding: '4px',
                 cursor: 'pointer',
                 borderRadius: '4px',
-                color: '#889397',
+                color: 'var(--atlas-text-secondary)',
                 display: 'flex',
                 alignItems: 'center',
               }}
               title={`Move sidebar to ${sidebarPosition === 'left' ? 'Right Side' : 'Left Side'}`}
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#00ed64')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = '#889397')}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--atlas-green)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--atlas-text-secondary)')}
             >
               <ArrowLeftRight size={14} />
             </button>
@@ -962,13 +962,13 @@ export function Sidebar() {
                 padding: '4px',
                 cursor: 'pointer',
                 borderRadius: '4px',
-                color: '#889397',
+                color: 'var(--atlas-text-secondary)',
                 display: 'flex',
                 alignItems: 'center',
               }}
               title="Collapse Navigation"
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#00ed64')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = '#889397')}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--atlas-green)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--atlas-text-secondary)')}
             >
               <PanelLeftClose size={15} />
             </button>
@@ -995,7 +995,7 @@ export function Sidebar() {
                       width: '8px',
                       height: '8px',
                       borderRadius: '50%',
-                      background: '#00ed64',
+                      background: 'var(--atlas-green)',
                       boxShadow: '0 0 8px #00ed64',
                       flexShrink: 0,
                     }}
@@ -1005,7 +1005,7 @@ export function Sidebar() {
                     style={{
                       fontSize: '0.78rem',
                       fontWeight: 700,
-                      color: '#f9fbfa',
+                      color: 'var(--atlas-text-primary)',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -1053,8 +1053,8 @@ export function Sidebar() {
                     textAlign: 'center',
                   }}
                 >
-                  <div style={{ fontSize: '0.58rem', color: '#889397', textTransform: 'uppercase' }}>Records</div>
-                  <div className="mono-font" style={{ fontSize: '0.74rem', fontWeight: 700, color: '#f9fbfa' }}>
+                  <div style={{ fontSize: '0.58rem', color: 'var(--atlas-text-secondary)', textTransform: 'uppercase' }}>Records</div>
+                  <div className="mono-font" style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--atlas-text-primary)' }}>
                     {file.records.length}
                   </div>
                 </div>
@@ -1067,8 +1067,8 @@ export function Sidebar() {
                     textAlign: 'center',
                   }}
                 >
-                  <div style={{ fontSize: '0.58rem', color: '#889397', textTransform: 'uppercase' }}>Valid</div>
-                  <div className="mono-font" style={{ fontSize: '0.74rem', fontWeight: 700, color: '#00ed64' }}>
+                  <div style={{ fontSize: '0.58rem', color: 'var(--atlas-text-secondary)', textTransform: 'uppercase' }}>Valid</div>
+                  <div className="mono-font" style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--atlas-green)' }}>
                     {((file.stats.goodRecords / file.stats.totalRecords) * 100).toFixed(0)}%
                   </div>
                 </div>
@@ -1081,8 +1081,8 @@ export function Sidebar() {
                     textAlign: 'center',
                   }}
                 >
-                  <div style={{ fontSize: '0.58rem', color: '#889397', textTransform: 'uppercase' }}>Size</div>
-                  <div className="mono-font" style={{ fontSize: '0.74rem', fontWeight: 700, color: '#889397' }}>
+                  <div style={{ fontSize: '0.58rem', color: 'var(--atlas-text-secondary)', textTransform: 'uppercase' }}>Size</div>
+                  <div className="mono-font" style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--atlas-text-secondary)' }}>
                     {(file.fileSize / 1024).toFixed(0)} KB
                   </div>
                 </div>
@@ -1092,13 +1092,13 @@ export function Sidebar() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f59e0b' }} />
-                <span style={{ fontSize: '0.74rem', color: '#889397', fontWeight: 600 }}>No Dataset Loaded</span>
+                <span style={{ fontSize: '0.74rem', color: 'var(--atlas-text-secondary)', fontWeight: 600 }}>No Dataset Loaded</span>
               </div>
               <div style={{ display: 'flex', gap: '4px' }}>
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   style={{
-                    background: '#00684a',
+                    background: 'var(--atlas-green-dark)',
                     border: '1px solid #00ed64',
                     color: '#fff',
                     borderRadius: '4px',
@@ -1113,9 +1113,9 @@ export function Sidebar() {
                 <button
                   onClick={() => folderInputRef.current?.click()}
                   style={{
-                    background: '#112733',
+                    background: 'var(--atlas-surface)',
                     border: '1px solid var(--atlas-border)',
-                    color: '#889397',
+                    color: 'var(--atlas-text-secondary)',
                     borderRadius: '4px',
                     padding: '2px 8px',
                     fontSize: '0.65rem',
@@ -1169,7 +1169,7 @@ export function Sidebar() {
                           textDecoration: 'none',
                           fontSize: '0.78rem',
                           fontWeight: isActive ? 600 : 400,
-                          color: isActive ? '#f9fbfa' : '#889397',
+                          color: isActive ? 'var(--atlas-text-primary)' : 'var(--atlas-text-secondary)',
                           background: isActive ? 'rgba(0, 237, 100, 0.08)' : 'transparent',
                           borderLeft: isActive ? '3px solid #00ed64' : '3px solid transparent',
                           transition: 'all 0.12s ease',
@@ -1181,14 +1181,14 @@ export function Sidebar() {
                           if (!isActive) e.currentTarget.style.background = 'transparent';
                         }}
                       >
-                        <Icon size={15} color={isActive ? '#00ed64' : '#889397'} />
+                        <Icon size={15} color={isActive ? 'var(--atlas-green)' : 'var(--atlas-text-secondary)'} />
                         <span>{item.label}</span>
                         {item.count !== undefined && (
                           <span
                             style={{
                               marginLeft: 'auto',
                               fontSize: '0.64rem',
-                              color: '#889397',
+                              color: 'var(--atlas-text-secondary)',
                               fontFamily: 'var(--font-mono)',
                               background: 'var(--atlas-surface)',
                               padding: '1px 5px',
@@ -1230,8 +1230,8 @@ export function Sidebar() {
                         padding: '4px 8px',
                         fontSize: '0.68rem',
                         borderRadius: '4px',
-                        background: stationViewMode === 'hierarchy' ? '#00684a' : 'transparent',
-                        color: stationViewMode === 'hierarchy' ? '#ffffff' : '#889397',
+                        background: stationViewMode === 'hierarchy' ? 'var(--atlas-green-dark)' : 'transparent',
+                        color: stationViewMode === 'hierarchy' ? '#ffffff' : 'var(--atlas-text-secondary)',
                         border: stationViewMode === 'hierarchy' ? '1px solid #00ed64' : '1px solid transparent',
                         cursor: 'pointer',
                         display: 'flex',
@@ -1242,7 +1242,7 @@ export function Sidebar() {
                         transition: 'all 0.15s ease',
                       }}
                     >
-                      <FolderTree size={12} color={stationViewMode === 'hierarchy' ? '#00ed64' : '#889397'} />
+                      <FolderTree size={12} color={stationViewMode === 'hierarchy' ? 'var(--atlas-green)' : 'var(--atlas-text-secondary)'} />
                       <span>Hierarchy Tree</span>
                     </button>
                     <button
@@ -1252,8 +1252,8 @@ export function Sidebar() {
                         padding: '4px 8px',
                         fontSize: '0.68rem',
                         borderRadius: '4px',
-                        background: stationViewMode === 'flat' ? '#00684a' : 'transparent',
-                        color: stationViewMode === 'flat' ? '#ffffff' : '#889397',
+                        background: stationViewMode === 'flat' ? 'var(--atlas-green-dark)' : 'transparent',
+                        color: stationViewMode === 'flat' ? '#ffffff' : 'var(--atlas-text-secondary)',
                         border: stationViewMode === 'flat' ? '1px solid #00ed64' : '1px solid transparent',
                         cursor: 'pointer',
                         display: 'flex',
@@ -1264,7 +1264,7 @@ export function Sidebar() {
                         transition: 'all 0.15s ease',
                       }}
                     >
-                      <List size={12} color={stationViewMode === 'flat' ? '#00ed64' : '#889397'} />
+                      <List size={12} color={stationViewMode === 'flat' ? 'var(--atlas-green)' : 'var(--atlas-text-secondary)'} />
                       <span>Flat List</span>
                     </button>
                   </div>
@@ -1277,7 +1277,7 @@ export function Sidebar() {
                     <>
                       {/* Selection Toolbar */}
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: '0.66rem', color: '#889397' }}>
+                        <span style={{ fontSize: '0.66rem', color: 'var(--atlas-text-secondary)' }}>
                           {filteredStations.length} of {stations.length}
                         </span>
                         <div style={{ display: 'flex', gap: '3px' }}>
@@ -1288,7 +1288,7 @@ export function Sidebar() {
                               fontSize: '0.62rem',
                               borderRadius: '3px',
                               background: 'var(--atlas-surface)',
-                              color: '#f9fbfa',
+                              color: 'var(--atlas-text-primary)',
                               border: '1px solid var(--atlas-border)',
                               cursor: 'pointer',
                             }}
@@ -1302,7 +1302,7 @@ export function Sidebar() {
                               fontSize: '0.62rem',
                               borderRadius: '3px',
                               background: 'var(--atlas-surface)',
-                              color: '#889397',
+                              color: 'var(--atlas-text-secondary)',
                               border: '1px solid var(--atlas-border)',
                               cursor: 'pointer',
                             }}
@@ -1330,7 +1330,7 @@ export function Sidebar() {
                       <div style={{ position: 'relative' }}>
                         <Search
                           size={12}
-                          color="#889397"
+                          color="var(--atlas-text-secondary)"
                           style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)' }}
                         />
                         <input
@@ -1345,7 +1345,7 @@ export function Sidebar() {
                             borderRadius: '4px',
                             background: 'var(--atlas-surface)',
                             border: '1px solid var(--atlas-border)',
-                            color: '#f9fbfa',
+                            color: 'var(--atlas-text-primary)',
                             outline: 'none',
                           }}
                         />
@@ -1359,7 +1359,7 @@ export function Sidebar() {
                               transform: 'translateY(-50%)',
                               background: 'none',
                               border: 'none',
-                              color: '#889397',
+                              color: 'var(--atlas-text-secondary)',
                               cursor: 'pointer',
                             }}
                           >
@@ -1377,8 +1377,8 @@ export function Sidebar() {
                               padding: '1px 5px',
                               fontSize: '0.6rem',
                               borderRadius: '3px',
-                              background: prefixFilter === 'ALL' ? '#00684a' : 'var(--atlas-surface)',
-                              color: prefixFilter === 'ALL' ? '#00ed64' : '#889397',
+                              background: prefixFilter === 'ALL' ? 'var(--atlas-green-dark)' : 'var(--atlas-surface)',
+                              color: prefixFilter === 'ALL' ? 'var(--atlas-green)' : 'var(--atlas-text-secondary)',
                               border: '1px solid var(--atlas-border)',
                               cursor: 'pointer',
                             }}
@@ -1393,8 +1393,8 @@ export function Sidebar() {
                                 padding: '1px 5px',
                                 fontSize: '0.6rem',
                                 borderRadius: '3px',
-                                background: prefixFilter === p ? '#00684a' : 'var(--atlas-surface)',
-                                color: prefixFilter === p ? '#00ed64' : '#889397',
+                                background: prefixFilter === p ? 'var(--atlas-green-dark)' : 'var(--atlas-surface)',
+                                color: prefixFilter === p ? 'var(--atlas-green)' : 'var(--atlas-text-secondary)',
                                 border: '1px solid var(--atlas-border)',
                                 cursor: 'pointer',
                                 fontFamily: 'var(--font-mono)',
@@ -1417,7 +1417,7 @@ export function Sidebar() {
                         }}
                       >
                         {filteredStations.length === 0 ? (
-                          <div style={{ padding: '16px 8px', textAlign: 'center', color: '#889397', fontSize: '0.74rem' }}>
+                          <div style={{ padding: '16px 8px', textAlign: 'center', color: 'var(--atlas-text-secondary)', fontSize: '0.74rem' }}>
                             No stations match
                           </div>
                         ) : (
@@ -1450,16 +1450,16 @@ export function Sidebar() {
                                   style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, overflow: 'hidden' }}
                                 >
                                   {isSelected ? (
-                                    <CheckSquare size={13} color="#00ed64" style={{ flexShrink: 0 }} />
+                                    <CheckSquare size={13} color="var(--atlas-green)" style={{ flexShrink: 0 }} />
                                   ) : (
-                                    <Square size={13} color="#889397" style={{ flexShrink: 0 }} />
+                                    <Square size={13} color="var(--atlas-text-secondary)" style={{ flexShrink: 0 }} />
                                   )}
                                   <div style={{ overflow: 'hidden' }}>
                                     <div
                                       style={{
                                         fontSize: '0.74rem',
                                         fontWeight: isSelected ? 600 : 400,
-                                        color: isSelected ? '#00ed64' : '#f9fbfa',
+                                        color: isSelected ? 'var(--atlas-green)' : 'var(--atlas-text-primary)',
                                         whiteSpace: 'nowrap',
                                         overflow: 'hidden',
                                         textOverflow: 'ellipsis',
@@ -1468,7 +1468,7 @@ export function Sidebar() {
                                       {displayName || st.stationId}
                                     </div>
                                     {displayName && (
-                                      <div className="mono-font" style={{ fontSize: '0.62rem', color: '#889397' }}>
+                                      <div className="mono-font" style={{ fontSize: '0.62rem', color: 'var(--atlas-text-secondary)' }}>
                                         {st.stationId}
                                       </div>
                                     )}
@@ -1493,7 +1493,7 @@ export function Sidebar() {
                                   <span
                                     style={{
                                       fontSize: '0.66rem',
-                                      color: '#889397',
+                                      color: 'var(--atlas-text-secondary)',
                                       fontFamily: 'var(--font-mono)',
                                     }}
                                   >
@@ -1509,7 +1509,7 @@ export function Sidebar() {
                                       border: 'none',
                                       padding: '1px',
                                       cursor: 'pointer',
-                                      color: '#889397',
+                                      color: 'var(--atlas-text-secondary)',
                                     }}
                                     title="View Station Details"
                                   >
@@ -1536,7 +1536,7 @@ export function Sidebar() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {/* Quality Filter */}
                   <div>
-                    <div style={{ fontSize: '0.66rem', color: '#889397', fontWeight: 600, marginBottom: '4px', textTransform: 'uppercase' }}>
+                    <div style={{ fontSize: '0.66rem', color: 'var(--atlas-text-secondary)', fontWeight: 600, marginBottom: '4px', textTransform: 'uppercase' }}>
                       Quality Filter
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>
@@ -1549,8 +1549,8 @@ export function Sidebar() {
                             fontSize: '0.68rem',
                             borderRadius: '4px',
                             border: qualityFilter === q ? '1px solid #00ed64' : '1px solid var(--atlas-border)',
-                            background: qualityFilter === q ? '#00684a' : 'var(--atlas-surface)',
-                            color: qualityFilter === q ? '#00ed64' : '#889397',
+                            background: qualityFilter === q ? 'var(--atlas-green-dark)' : 'var(--atlas-surface)',
+                            color: qualityFilter === q ? 'var(--atlas-green)' : 'var(--atlas-text-secondary)',
                             cursor: 'pointer',
                             fontWeight: qualityFilter === q ? 600 : 400,
                             display: 'flex',
@@ -1559,7 +1559,7 @@ export function Sidebar() {
                             gap: '3px',
                           }}
                         >
-                          {q === 'Good' && <CheckCircle2 size={10} color="#00ed64" />}
+                          {q === 'Good' && <CheckCircle2 size={10} color="var(--atlas-green)" />}
                           {q === 'Bad' && <XCircle size={10} color="#ef4444" />}
                           {q === 'all' ? 'ALL' : q.toUpperCase()}
                         </button>
@@ -1569,7 +1569,7 @@ export function Sidebar() {
 
                   {/* Status Carrier Mode */}
                   <div>
-                    <div style={{ fontSize: '0.66rem', color: '#889397', fontWeight: 600, marginBottom: '4px', textTransform: 'uppercase' }}>
+                    <div style={{ fontSize: '0.66rem', color: 'var(--atlas-text-secondary)', fontWeight: 600, marginBottom: '4px', textTransform: 'uppercase' }}>
                       Carrier Status
                     </div>
                     <div style={{ display: 'flex', gap: '6px' }}>
@@ -1586,14 +1586,14 @@ export function Sidebar() {
                             gap: '4px',
                             fontSize: '0.68rem',
                             cursor: 'pointer',
-                            color: statusFilter.includes(code) ? '#f9fbfa' : '#889397',
+                            color: statusFilter.includes(code) ? 'var(--atlas-text-primary)' : 'var(--atlas-text-secondary)',
                           }}
                         >
                           <input
                             type="checkbox"
                             checked={statusFilter.includes(code)}
                             onChange={() => toggleStatusFilter(code)}
-                            style={{ accentColor: '#00ed64' }}
+                            style={{ accentColor: 'var(--atlas-green)' }}
                           />
                           <span style={{ color, fontFamily: 'var(--font-mono)' }}>{label}</span>
                         </label>
@@ -1604,7 +1604,7 @@ export function Sidebar() {
                   {/* Record Types (H-Codes) */}
                   {file.stats.hValues && file.stats.hValues.length > 0 && (
                     <div>
-                      <div style={{ fontSize: '0.66rem', color: '#889397', fontWeight: 600, marginBottom: '4px', textTransform: 'uppercase' }}>
+                      <div style={{ fontSize: '0.66rem', color: 'var(--atlas-text-secondary)', fontWeight: 600, marginBottom: '4px', textTransform: 'uppercase' }}>
                         Record Type (H-Code)
                       </div>
                       <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
@@ -1618,8 +1618,8 @@ export function Sidebar() {
                                 padding: '2px 6px',
                                 fontSize: '0.64rem',
                                 borderRadius: '4px',
-                                background: isSelected ? '#00684a' : 'var(--atlas-surface)',
-                                color: isSelected ? '#00ed64' : '#889397',
+                                background: isSelected ? 'var(--atlas-green-dark)' : 'var(--atlas-surface)',
+                                color: isSelected ? 'var(--atlas-green)' : 'var(--atlas-text-secondary)',
                                 border: isSelected ? '1px solid #00ed64' : '1px solid var(--atlas-border)',
                                 cursor: 'pointer',
                                 fontFamily: 'var(--font-mono)',
@@ -1636,7 +1636,7 @@ export function Sidebar() {
                   {/* Time Range Filter */}
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.66rem', color: '#889397', fontWeight: 600, textTransform: 'uppercase' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.66rem', color: 'var(--atlas-text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>
                         <Clock size={10} />
                         <span>Time Range</span>
                       </div>
@@ -1646,7 +1646,7 @@ export function Sidebar() {
                           style={{
                             background: 'none',
                             border: 'none',
-                            color: '#00ed64',
+                            color: 'var(--atlas-green)',
                             fontSize: '0.64rem',
                             cursor: 'pointer',
                             padding: 0,
@@ -1681,7 +1681,7 @@ export function Sidebar() {
                             fontSize: '0.66rem',
                             borderRadius: '4px',
                             background: 'var(--atlas-surface)',
-                            color: '#889397',
+                            color: 'var(--atlas-text-secondary)',
                             border: '1px solid var(--atlas-border)',
                             cursor: 'pointer',
                           }}
@@ -1730,16 +1730,16 @@ export function Sidebar() {
                       padding: '7px 10px',
                       borderRadius: '6px',
                       background: 'var(--atlas-surface)',
-                      color: '#f9fbfa',
+                      color: 'var(--atlas-text-primary)',
                       border: '1px solid var(--atlas-border)',
                       fontSize: '0.74rem',
                       cursor: 'pointer',
                       transition: 'all 0.15s ease',
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#00ed64')}
+                    onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--atlas-green)')}
                     onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--atlas-border)')}
                   >
-                    <UploadCloud size={14} color="#00ed64" />
+                    <UploadCloud size={14} color="var(--atlas-green)" />
                     <span>Upload New .CSD</span>
                   </button>
 
@@ -1753,16 +1753,16 @@ export function Sidebar() {
                       padding: '7px 10px',
                       borderRadius: '6px',
                       background: 'var(--atlas-surface)',
-                      color: '#f9fbfa',
+                      color: 'var(--atlas-text-primary)',
                       border: '1px solid var(--atlas-border)',
                       fontSize: '0.74rem',
                       cursor: 'pointer',
                       transition: 'all 0.15s ease',
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#00ed64')}
+                    onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--atlas-green)')}
                     onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--atlas-border)')}
                   >
-                    <FolderOpen size={14} color="#00ed64" />
+                    <FolderOpen size={14} color="var(--atlas-green)" />
                     <span>Choose Folder Path</span>
                   </button>
 
@@ -1779,18 +1779,18 @@ export function Sidebar() {
                       padding: '7px 10px',
                       borderRadius: '6px',
                       background: 'var(--atlas-surface)',
-                      color: '#889397',
+                      color: 'var(--atlas-text-secondary)',
                       border: '1px solid var(--atlas-border)',
                       fontSize: '0.74rem',
                       cursor: 'pointer',
                       transition: 'all 0.15s ease',
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.color = '#f9fbfa';
+                      e.currentTarget.style.color = 'var(--atlas-text-primary)';
                       e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.color = '#889397';
+                      e.currentTarget.style.color = 'var(--atlas-text-secondary)';
                       e.currentTarget.style.borderColor = 'var(--atlas-border)';
                     }}
                   >
@@ -1834,7 +1834,7 @@ export function Sidebar() {
             alignItems: 'center',
             justifyContent: 'space-between',
             fontSize: '0.68rem',
-            color: '#889397',
+            color: 'var(--atlas-text-secondary)',
           }}
         >
           {/* Width Presets */}
@@ -1851,8 +1851,8 @@ export function Sidebar() {
                 style={{
                   padding: '1px 5px',
                   borderRadius: '3px',
-                  background: sidebarWidth === p.val ? '#00684a' : 'var(--atlas-surface)',
-                  color: sidebarWidth === p.val ? '#00ed64' : '#889397',
+                  background: sidebarWidth === p.val ? 'var(--atlas-green-dark)' : 'var(--atlas-surface)',
+                  color: sidebarWidth === p.val ? 'var(--atlas-green)' : 'var(--atlas-text-secondary)',
                   border: '1px solid var(--atlas-border)',
                   cursor: 'pointer',
                   fontSize: '0.6rem',
@@ -1873,13 +1873,13 @@ export function Sidebar() {
               gap: '4px',
               background: 'none',
               border: 'none',
-              color: '#889397',
+              color: 'var(--atlas-text-secondary)',
               cursor: 'pointer',
               fontSize: '0.65rem',
             }}
             title="Move sidebar to left or right side of screen"
           >
-            <ArrowLeftRight size={12} color="#00ed64" />
+            <ArrowLeftRight size={12} color="var(--atlas-green)" />
             <span>Move {sidebarPosition === 'left' ? 'Right' : 'Left'}</span>
           </button>
         </div>
@@ -1913,7 +1913,7 @@ export function Sidebar() {
               width: '2px',
               height: '32px',
               borderRadius: '2px',
-              background: '#00ed64',
+              background: 'var(--atlas-green)',
               opacity: 0.6,
             }}
           />

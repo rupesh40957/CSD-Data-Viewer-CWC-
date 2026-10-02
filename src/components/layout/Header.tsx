@@ -188,12 +188,14 @@ export function Header() {
                 textDecoration: 'none',
                 fontSize: '0.84rem',
                 fontWeight: isActive ? 600 : 500,
-                color: isActive ? '#ffffff' : 'var(--text-muted)',
+                color: isActive ? (theme === 'dark' ? '#ffffff' : 'var(--primary)') : 'var(--text-muted)',
                 background: isActive
-                  ? 'linear-gradient(135deg, rgba(2, 132, 199, 0.35), rgba(6, 182, 212, 0.2))'
+                  ? theme === 'dark'
+                    ? 'linear-gradient(135deg, rgba(2, 132, 199, 0.35), rgba(6, 182, 212, 0.2))'
+                    : 'rgba(2, 132, 199, 0.12)'
                   : 'transparent',
                 border: isActive
-                  ? '1px solid rgba(56, 189, 248, 0.35)'
+                  ? '1px solid var(--border-focus)'
                   : '1px solid transparent',
                 transition: 'all 0.15s ease',
               }}

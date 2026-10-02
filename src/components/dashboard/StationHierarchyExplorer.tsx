@@ -438,7 +438,7 @@ export function StationHierarchyExplorer() {
                   style={{
                     padding: '10px 14px',
                     borderRadius: 'var(--radius-sm)',
-                    background: 'rgba(255, 255, 255, 0.02)',
+                    background: 'var(--bg-subtle)',
                     border: '1px solid var(--border)',
                   }}
                 >
@@ -455,7 +455,7 @@ export function StationHierarchyExplorer() {
                   style={{
                     padding: '10px 14px',
                     borderRadius: 'var(--radius-sm)',
-                    background: 'rgba(255, 255, 255, 0.02)',
+                    background: 'var(--bg-subtle)',
                     border: '1px solid var(--border)',
                   }}
                 >
@@ -472,7 +472,7 @@ export function StationHierarchyExplorer() {
                   style={{
                     padding: '10px 14px',
                     borderRadius: 'var(--radius-sm)',
-                    background: 'rgba(255, 255, 255, 0.02)',
+                    background: 'var(--bg-subtle)',
                     border: '1px solid var(--border)',
                   }}
                 >
@@ -489,7 +489,7 @@ export function StationHierarchyExplorer() {
                   style={{
                     padding: '10px 14px',
                     borderRadius: 'var(--radius-sm)',
-                    background: 'rgba(255, 255, 255, 0.02)',
+                    background: 'var(--bg-subtle)',
                     border: '1px solid var(--border)',
                   }}
                 >
@@ -575,7 +575,7 @@ export function StationHierarchyExplorer() {
                             key={`${st.channel}-${idx}`}
                             style={{
                               borderBottom: '1px solid var(--border)',
-                              background: idx % 2 === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.015)',
+                              background: idx % 2 === 0 ? 'transparent' : 'var(--bg-subtle)',
                             }}
                           >
                             <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--text-main)' }}>
@@ -587,7 +587,7 @@ export function StationHierarchyExplorer() {
                             <td style={{ padding: '8px 12px', color: 'var(--text-muted)' }}>
                               {st.unit}
                             </td>
-                            <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: '#38bdf8' }}>
+                            <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: 'var(--primary-light)' }}>
                               {st.latest !== null ? String(st.latest) : '—'}
                             </td>
                             <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-muted)' }}>

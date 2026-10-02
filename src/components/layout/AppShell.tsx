@@ -1,11 +1,21 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useAppStore } from '@/store/use-app-store';
 import { Sidebar } from '@/components/layout/Sidebar';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { sidebarPosition } = useAppStore();
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('csd_theme') as 'dark' | 'light' | null;
+      if (saved && (saved === 'dark' || saved === 'light')) {
+        useAppStore.setState({ theme: saved });
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    } catch {}
+  }, []);
 
   return (
     <div
