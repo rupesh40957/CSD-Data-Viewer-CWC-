@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useAppStore } from '@/store/use-app-store';
 import { formatCsdTimestamp } from '@/lib/parser/timestamp-parser';
+import { computeRecordEngineeringValues, getParameterColor } from '@/lib/insat/compute';
 import {
   X,
   Radio,
@@ -15,6 +16,8 @@ import {
   Check,
   Building2,
   ExternalLink,
+  Satellite,
+  Zap,
 } from 'lucide-react';
 
 export function RecordDrawer() {
@@ -24,6 +27,9 @@ export function RecordDrawer() {
     setSelectedRecordId,
     stationMasterMap,
     setSelectedStationIdForDetails,
+    insatSensors,
+    insatMSL,
+    showEngineeringValues,
   } = useAppStore();
 
   const [copied, setCopied] = React.useState(false);
@@ -425,6 +431,82 @@ export function RecordDrawer() {
             </div>
           </div>
         </div>
+
+        {/* 4b. INSAT Engineering Values */}
+        {showEngineeringValues && (() => {
+          const enabledSensors = insatSensors.filter((s) => s.enabled);
+          if (enabledSensors.length === 0) return null;
+          const engValues = computeRecordEngineeringValues(enabledSensors, record, insatMSL);
+          const entries = Object.values(engValues);
+
+          return (
+            <div
+              style={{
+                padding: '12px',
+                borderRadius: 'var(--radius-md)',
+                background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.06), rgba(6, 182, 212, 0.04))',
+                border: '1px solid rgba(139, 92, 246, 0.15)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Zap size={13} color="#a78bfa" />
+                  <span style={{ fontSize: '0.7rem', color: '#a78bfa', fontWeight: 700, letterSpacing: '0.04em' }}>
+                    INSAT ENGINEERING VALUES
+                  </span>
+                </div>
+                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                  {entries.filter((e) => e.isValid).length}/{entries.length} computed
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
+                  gap: '6px',
+                }}
+              >
+                {entries.map((ev) => (
+                  <div
+                    key={ev.parameterName}
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      background: 'var(--bg-surface)',
+                      border: ev.isValid
+                        ? '1px solid rgba(139, 92, 246, 0.12)'
+                        : '1px solid rgba(239, 68, 68, 0.2)',
+                      textAlign: 'center',
+                    }}
+                    title={
+                      ev.isValid
+                        ? `Raw: ${ev.rawInputs.join(', ')} → ${ev.sourceKeys.join(', ')}`
+                        : 'Missing or corrupt input data'
+                    }
+                  >
+                    <div style={{ fontSize: '0.65rem', color: '#a78bfa', fontWeight: 600, marginBottom: '3px' }}>
+                      {ev.parameterName}
+                    </div>
+                    <div
+                      className="mono-font"
+                      style={{
+                        fontSize: '0.88rem',
+                        fontWeight: 700,
+                        color: getParameterColor(ev.parameterName, ev.value),
+                      }}
+                    >
+                      {ev.displayValue}
+                    </div>
+                    <div style={{ fontSize: '0.6rem', color: 'var(--text-dim)', marginTop: '2px' }}>
+                      {ev.unit} • {ev.sourceKeys.join('+')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* 5. Signal Code */}
         <div

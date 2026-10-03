@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAppStore, selectFilteredRecords } from '@/store/use-app-store';
@@ -20,7 +20,7 @@ import {
   FolderOpen,
   Radio,
 } from 'lucide-react';
-import { exportToExcel, exportToCsv } from '@/lib/utils/export';
+import { ExportOptionsModal } from '@/components/export/ExportOptionsModal';
 
 export function Header() {
   const pathname = usePathname();
@@ -34,6 +34,8 @@ export function Header() {
     setIsImportModalOpen,
   } = useAppStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'excel' | 'csv'>('excel');
 
   const navItems = [
     { label: 'Overview', href: '/', icon: Activity },
@@ -43,17 +45,13 @@ export function Header() {
   ];
 
   const handleExportExcel = () => {
-    const records = selectFilteredRecords(useAppStore.getState());
-    if (records.length === 0) return;
-    const name = file ? `${file.filename.replace('.csd', '')}_filtered.xlsx` : 'csd_export.xlsx';
-    exportToExcel(records, name);
+    setExportFormat('excel');
+    setExportModalOpen(true);
   };
 
   const handleExportCsv = () => {
-    const records = selectFilteredRecords(useAppStore.getState());
-    if (records.length === 0) return;
-    const name = file ? `${file.filename.replace('.csd', '')}_filtered.csv` : 'csd_export.csv';
-    exportToCsv(records, name);
+    setExportFormat('csv');
+    setExportModalOpen(true);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,6 +69,7 @@ export function Header() {
   };
 
   return (
+    <>
     <header
       style={{
         display: 'flex',
@@ -264,5 +263,11 @@ export function Header() {
         </button>
       </div>
     </header>
+      <ExportOptionsModal
+        isOpen={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        format={exportFormat}
+      />
+    </>
   );
 }

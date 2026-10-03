@@ -3,7 +3,8 @@
 import React, { useState, useMemo } from 'react';
 import { useAppStore, selectFilteredRecords } from '@/store/use-app-store';
 import { formatCsdTimestamp } from '@/lib/parser/timestamp-parser';
-import { exportToExcel, exportToCsv } from '@/lib/utils/export';
+import { computeRecordEngineeringValues, getParameterColor, formatEngineeringValue } from '@/lib/insat/compute';
+import { ExportOptionsModal } from '@/components/export/ExportOptionsModal';
 import {
   Search,
   Download,
@@ -14,6 +15,8 @@ import {
   Filter,
   Columns,
   RefreshCw,
+  Satellite,
+  Zap,
 } from 'lucide-react';
 import { CsdRecord } from '@/types/csd';
 import { RecordDrawer } from './RecordDrawer';
@@ -32,11 +35,24 @@ export function DataTable() {
     tablePageSize,
     setTablePageSize,
     stationMasterMap,
+    insatSensors,
+    insatMSL,
+    showEngineeringValues,
+    setShowEngineeringValues,
+    setIsInsatConfigOpen,
   } = useAppStore();
   const records = useAppStore(selectFilteredRecords);
 
   const [showConfigCols, setShowConfigCols] = useState(true);
   const [showAllSensors, setShowAllSensors] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'excel' | 'csv'>('excel');
+
+  // Get enabled INSAT sensors for header columns
+  const enabledInsatSensors = useMemo(
+    () => insatSensors.filter((s) => s.enabled),
+    [insatSensors]
+  );
 
   // Pagination calculation
   const totalPages = Math.ceil(records.length / tablePageSize) || 1;
@@ -59,11 +75,13 @@ export function DataTable() {
   }
 
   const handleExportExcel = () => {
-    exportToExcel(records, `${file.filename.replace('.csd', '')}_report.xlsx`);
+    setExportFormat('excel');
+    setExportModalOpen(true);
   };
 
   const handleExportCsv = () => {
-    exportToCsv(records, `${file.filename.replace('.csd', '')}_report.csv`);
+    setExportFormat('csv');
+    setExportModalOpen(true);
   };
 
   return (
@@ -168,6 +186,37 @@ export function DataTable() {
             <span>Sensors ({showAllSensors ? 'Full' : 'Compact'})</span>
           </button>
 
+          <button
+            onClick={() => setShowEngineeringValues(!showEngineeringValues)}
+            className="btn-secondary"
+            style={{
+              padding: '6px 10px',
+              fontSize: '0.75rem',
+              background: showEngineeringValues ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-surface)',
+              border: showEngineeringValues
+                ? '1px solid rgba(16, 185, 129, 0.3)'
+                : '1px solid var(--border)',
+              color: showEngineeringValues ? '#10b981' : 'var(--text-muted)',
+            }}
+            title="Toggle INSAT engineering value columns"
+          >
+            <Zap size={13} />
+            <span>Eng. Values</span>
+          </button>
+
+          <button
+            onClick={() => setIsInsatConfigOpen(true)}
+            className="btn-secondary"
+            style={{
+              padding: '6px 10px',
+              fontSize: '0.75rem',
+            }}
+            title="Configure INSAT sensor equations"
+          >
+            <Satellite size={13} />
+            <span>INSAT Config</span>
+          </button>
+
           <select
             value={tablePageSize}
             onChange={(e) => {
@@ -208,7 +257,7 @@ export function DataTable() {
           style={{
             width: '100%',
             borderCollapse: 'collapse',
-            fontSize: '0.8rem',
+            fontSize: '0.76rem',
             textAlign: 'left',
           }}
         >
@@ -230,13 +279,32 @@ export function DataTable() {
                 letterSpacing: '0.04em',
               }}
             >
-              <th style={{ padding: '10px 12px', width: '50px' }}>Line</th>
-              <th style={{ padding: '10px 12px', minWidth: '160px' }}>Station Name</th>
-              <th style={{ padding: '10px 12px' }}>Station ID</th>
-              <th style={{ padding: '10px 12px' }}>Date & Time (IST)</th>
+              <th style={{ padding: '7px 10px', width: '50px' }}>Line</th>
+              <th style={{ padding: '7px 10px', minWidth: '160px' }}>Station Name</th>
+              <th style={{ padding: '7px 10px' }}>Station ID</th>
+              <th style={{ padding: '7px 10px' }}>Date & Time (IST)</th>
               <th style={{ padding: '10px 10px' }}>Offset</th>
               <th style={{ padding: '10px 10px' }}>Status</th>
               <th style={{ padding: '10px 10px' }}>Quality</th>
+
+              {/* INSAT Engineering Value Columns — right after Quality for visibility */}
+              {showEngineeringValues && enabledInsatSensors.map((sensor) => (
+                <th
+                  key={sensor.sensorName}
+                  style={{
+                    padding: '10px 10px',
+                    whiteSpace: 'nowrap',
+                    fontSize: '0.68rem',
+                    background: 'rgba(139, 92, 246, 0.04)',
+                  }}
+                  title={`${sensor.equationDisplay} (${sensor.insatSensorIds.join(', ')})`}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span style={{ color: '#a78bfa', fontWeight: 700 }}>{sensor.sensorName}</span>
+                    <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>({sensor.unit})</span>
+                  </div>
+                </th>
+              ))}
 
               {showConfigCols && (
                 <>
@@ -272,9 +340,10 @@ export function DataTable() {
                 </td>
               </tr>
             ) : (
-              paginatedRecords.map((r) => {
+              paginatedRecords.map((r, rowIdx) => {
                 const isBad = r.quality === 'Bad';
                 const isSelected = selectedRecordId === r.id;
+                const isEven = rowIdx % 2 === 0;
                 const masterInfo =
                   r.stationMetadata || stationMasterMap.get(r.stationId.trim().toUpperCase());
                 const stationName = r.stationName || masterInfo?.stationName || null;
@@ -283,13 +352,15 @@ export function DataTable() {
                     key={r.id}
                     onClick={() => setSelectedRecordId(isSelected ? null : r.id)}
                     style={{
-                      height: '42px',
-                      borderBottom: '1px solid var(--border)',
+                      height: '34px',
+                      borderBottom: '1px solid rgba(148, 163, 184, 0.05)',
                       background: isSelected
                         ? 'var(--primary-glow)'
                         : isBad
                         ? 'rgba(239, 68, 68, 0.04)'
-                        : 'transparent',
+                        : isEven
+                        ? 'transparent'
+                        : 'rgba(148, 163, 184, 0.025)',
                       borderLeft: isSelected
                         ? '3px solid var(--primary-light)'
                         : '3px solid transparent',
@@ -314,7 +385,7 @@ export function DataTable() {
                     {/* Line */}
                     <td
                       style={{
-                        padding: '8px 12px',
+                        padding: '5px 10px',
                         color: 'var(--text-dim)',
                         fontFamily: 'var(--font-mono)',
                         fontSize: '0.72rem',
@@ -324,7 +395,7 @@ export function DataTable() {
                     </td>
 
                     {/* Station Name */}
-                    <td style={{ padding: '8px 12px' }}>
+                    <td style={{ padding: '5px 10px' }}>
                       {stationName ? (
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                           <span style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.8rem' }}>
@@ -357,7 +428,7 @@ export function DataTable() {
                     </td>
 
                     {/* Station ID */}
-                    <td style={{ padding: '8px 12px' }}>
+                    <td style={{ padding: '5px 10px' }}>
                       <span
                         className="mono-font"
                         style={{
@@ -372,7 +443,7 @@ export function DataTable() {
                     {/* Timestamp IST */}
                     <td
                       style={{
-                        padding: '8px 12px',
+                        padding: '5px 10px',
                         fontFamily: 'var(--font-mono)',
                         color: 'var(--text-main)',
                         whiteSpace: 'nowrap',
@@ -384,7 +455,7 @@ export function DataTable() {
                     {/* Time Offset */}
                     <td
                       style={{
-                        padding: '8px 10px',
+                        padding: '5px 8px',
                         fontFamily: 'var(--font-mono)',
                         color: 'var(--text-muted)',
                       }}
@@ -393,7 +464,7 @@ export function DataTable() {
                     </td>
 
                     {/* Status Mode */}
-                    <td style={{ padding: '8px 10px' }}>
+                    <td style={{ padding: '5px 8px' }}>
                       {r.status === 'L' && (
                         <span className="badge badge-locked">L</span>
                       )}
@@ -406,7 +477,7 @@ export function DataTable() {
                     </td>
 
                     {/* Quality */}
-                    <td style={{ padding: '8px 10px' }}>
+                    <td style={{ padding: '5px 8px' }}>
                       {r.quality === 'Good' ? (
                         <span className="badge badge-good">Good</span>
                       ) : (
@@ -415,6 +486,37 @@ export function DataTable() {
                         </span>
                       )}
                     </td>
+
+                    {/* INSAT Engineering Value Cells — right after Quality */}
+                    {showEngineeringValues && (() => {
+                      const engValues = computeRecordEngineeringValues(enabledInsatSensors, r, insatMSL);
+                      return enabledInsatSensors.map((sensor) => {
+                        const ev = engValues[sensor.sensorName];
+                        if (!ev) return (
+                          <td key={sensor.sensorName} style={{ padding: '5px 8px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', background: 'rgba(139, 92, 246, 0.02)' }}>—</td>
+                        );
+                        return (
+                          <td
+                            key={sensor.sensorName}
+                            style={{
+                              padding: '5px 8px',
+                              fontFamily: 'var(--font-mono)',
+                              fontWeight: ev.isValid ? 700 : 400,
+                              fontSize: '0.78rem',
+                              color: getParameterColor(sensor.sensorName, ev.value),
+                              background: 'rgba(139, 92, 246, 0.02)',
+                            }}
+                            title={
+                              ev.isValid
+                                ? `Raw: ${ev.rawInputs.join(', ')} | Eq: ${sensor.equationDisplay}`
+                                : 'Missing or corrupt input'
+                            }
+                          >
+                            {ev.displayValue}
+                          </td>
+                        );
+                      });
+                    })()}
 
                     {/* Config c1, c2, c3, H */}
                     {showConfigCols && (
@@ -448,7 +550,7 @@ export function DataTable() {
                         </td>
                         <td
                           style={{
-                            padding: '8px 10px',
+                            padding: '5px 8px',
                             fontFamily: 'var(--font-mono)',
                             fontWeight: 600,
                             color: r.h ? 'var(--text-main)' : 'var(--quality-bad)',
@@ -460,7 +562,7 @@ export function DataTable() {
                     )}
 
                     {/* s16 Composite float */}
-                    <td style={{ padding: '8px 12px' }}>
+                    <td style={{ padding: '5px 10px' }}>
                       <span
                         className="mono-font"
                         style={{
@@ -480,7 +582,7 @@ export function DataTable() {
                     {/* s17 */}
                     <td
                       style={{
-                        padding: '8px 10px',
+                        padding: '5px 8px',
                         fontFamily: 'var(--font-mono)',
                         color: r.s17 === null ? 'var(--quality-bad)' : 'var(--text-muted)',
                       }}
@@ -489,7 +591,7 @@ export function DataTable() {
                     </td>
 
                     {/* Sensor Array / Active Telemetry */}
-                    <td style={{ padding: '8px 10px' }}>
+                    <td style={{ padding: '5px 8px' }}>
                       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', maxWidth: '320px' }}>
                         {r.sensors.map((s, sIdx) => {
                           const isDollar = s.value === null;
@@ -529,6 +631,8 @@ export function DataTable() {
                         {r.signal.raw}
                       </span>
                     </td>
+
+
                   </tr>
                 );
               })
@@ -590,6 +694,11 @@ export function DataTable() {
 
       {/* Record Details Drawer */}
       <RecordDrawer />
+      <ExportOptionsModal
+        isOpen={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        format={exportFormat}
+      />
     </div>
   );
 }

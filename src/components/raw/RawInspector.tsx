@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useAppStore } from '@/store/use-app-store';
+import { formatRawGmtToIst } from '@/lib/parser/timestamp-parser';
 import { FileCode, AlertOctagon, Filter, Search, CheckCircle2 } from 'lucide-react';
 
 export function RawInspector() {
@@ -235,7 +236,8 @@ export function RawInspector() {
                       className="mono-font"
                       style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}
                     >
-                      {r.timestampRaw}
+                      {formatRawGmtToIst(r.timestampRaw)}
+                      <span style={{ fontSize: '0.6rem', color: 'var(--text-dim)', marginLeft: '4px' }}>IST</span>
                     </span>
                   </div>
 

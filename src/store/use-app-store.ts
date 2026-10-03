@@ -20,6 +20,8 @@ import {
 import {
   parseStationMasterWorkbook,
 } from '@/lib/parser/station-master-parser';
+import { InsatSensorConfig, InsatSensorProfile } from '@/lib/insat/types';
+import { DEFAULT_INSAT_SENSORS, DEFAULT_INSAT_PROFILE } from '@/lib/insat/default-config';
 import defaultStationMasterList from '@/data/default-station-master.json';
 
 // Initialize synchronous in-memory Station Master Map with bundled 1,054 stations
@@ -92,6 +94,12 @@ export interface AppStore {
   // 11. UI Theme
   theme: 'dark' | 'light';
 
+  // 12. INSAT Sensor Configuration & Engineering Values
+  insatSensors: InsatSensorConfig[];
+  insatMSL: number;
+  showEngineeringValues: boolean;
+  isInsatConfigOpen: boolean;
+
   // Actions
   setFile: (file: CSDFile) => void;
   setIsLoading: (loading: boolean, progress?: string) => void;
@@ -113,6 +121,15 @@ export interface AppStore {
   setSelectedSensors: (sensors: string[]) => void;
   toggleSensor: (sensorKey: string) => void;
   setSelectedSensorKey: (sensor: string) => void;
+
+  // INSAT Config Actions
+  setInsatSensors: (sensors: InsatSensorConfig[]) => void;
+  updateInsatSensor: (index: number, config: InsatSensorConfig) => void;
+  toggleInsatSensor: (index: number) => void;
+  resetInsatSensors: () => void;
+  setInsatMSL: (msl: number) => void;
+  setShowEngineeringValues: (show: boolean) => void;
+  setIsInsatConfigOpen: (open: boolean) => void;
 
   updateSensorMetadata: (key: string, meta: { customLabel: string; unit: string }) => void;
   resetSensorMetadata: () => void;
@@ -229,12 +246,37 @@ export const useAppStore = create<AppStore>((set, get) => ({
   isImportModalOpen: false,
 
   theme: 'dark',
+
+  // INSAT Sensor Configuration defaults
+  insatSensors: DEFAULT_INSAT_SENSORS,
+  insatMSL: 0,
+  showEngineeringValues: true,
+  isInsatConfigOpen: false,
   stationViewMode: 'hierarchy',
   sidebarPosition: 'left',
   sidebarWidth: 320,
   isSidebarCollapsed: false,
 
   setIsImportModalOpen: (isImportModalOpen) => set({ isImportModalOpen }),
+
+  // INSAT Config Actions
+  setInsatSensors: (insatSensors) => set({ insatSensors }),
+  updateInsatSensor: (index, config) =>
+    set((state) => {
+      const next = [...state.insatSensors];
+      next[index] = config;
+      return { insatSensors: next };
+    }),
+  toggleInsatSensor: (index) =>
+    set((state) => {
+      const next = [...state.insatSensors];
+      next[index] = { ...next[index], enabled: !next[index].enabled };
+      return { insatSensors: next };
+    }),
+  resetInsatSensors: () => set({ insatSensors: DEFAULT_INSAT_SENSORS, insatMSL: 0 }),
+  setInsatMSL: (insatMSL) => set({ insatMSL }),
+  setShowEngineeringValues: (showEngineeringValues) => set({ showEngineeringValues }),
+  setIsInsatConfigOpen: (isInsatConfigOpen) => set({ isInsatConfigOpen }),
   setStationViewMode: (stationViewMode) => set({ stationViewMode }),
   setSidebarPosition: (sidebarPosition) => set({ sidebarPosition }),
   setSidebarWidth: (sidebarWidth) => set({ sidebarWidth }),
