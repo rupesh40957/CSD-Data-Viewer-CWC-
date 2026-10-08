@@ -187,7 +187,7 @@ export interface AppStore {
   archiveDateRange: { from: string; to: string };
   isArchiveModalOpen: boolean;
 
-  loadArchiveFolder: (files: File[], folderName?: string) => void;
+  loadArchiveFolder: (files: File[], folderName?: string) => Promise<void>;
   selectArchiveDate: (dateKey: string) => void;
   setArchiveDateRange: (range: { from: string; to: string }) => void;
   loadArchiveFile: (fileInfo: ArchiveFileInfo) => Promise<void>;
@@ -613,9 +613,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setIsArchiveModalOpen: (isArchiveModalOpen) => set({ isArchiveModalOpen }),
   setArchiveDateRange: (archiveDateRange) => set({ archiveDateRange }),
 
-  loadArchiveFolder: (files, folderName = 'Telemetry Archive') => {
+  loadArchiveFolder: async (files, folderName = 'Telemetry Archive') => {
     try {
       const catalog = buildDynamicArchiveCatalog(files, folderName);
+      if (catalog.totalFiles === 0) {
+        alert('No .csd or .txt telemetry files found in the chosen folder.');
+        return;
+      }
       const initialDate = catalog.maxDate || catalog.minDate || null;
       set({
         archiveCatalog: catalog,
@@ -630,7 +634,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       // Auto-load first file of latest available date if exists
       if (initialDate && catalog.dateFileMap[initialDate]?.length > 0) {
         const firstFile = catalog.dateFileMap[initialDate][0];
-        get().loadArchiveFile(firstFile);
+        await get().loadArchiveFile(firstFile);
       }
     } catch (err) {
       console.error('Failed to build dynamic archive catalog:', err);
@@ -656,7 +660,27 @@ export const useAppStore = create<AppStore>((set, get) => ({
         parseProgress: `Loading ${fileInfo.name}...`,
       });
 
-      const buffer = await fileInfo.fileRef.arrayBuffer();
+      let buffer: ArrayBuffer;
+      if (typeof fileInfo.fileRef.arrayBuffer === 'function') {
+        try {
+          buffer = await fileInfo.fileRef.arrayBuffer();
+        } catch {
+          buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as ArrayBuffer);
+            reader.onerror = () => reject(reader.error || new Error('FileReader failed'));
+            reader.readAsArrayBuffer(fileInfo.fileRef);
+          });
+        }
+      } else {
+        buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as ArrayBuffer);
+          reader.onerror = () => reject(reader.error || new Error('FileReader failed'));
+          reader.readAsArrayBuffer(fileInfo.fileRef);
+        });
+      }
+
       const decoded = decodeCsdBuffer(buffer);
       const parsed = parseCsdContent(decoded, fileInfo.name, fileInfo.size, get().stationMasterMap);
 

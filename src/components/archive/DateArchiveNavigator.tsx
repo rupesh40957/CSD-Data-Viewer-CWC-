@@ -31,7 +31,7 @@ export function DateArchiveNavigator() {
 
   const folderInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFolderChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
@@ -39,8 +39,8 @@ export function DateArchiveNavigator() {
     const firstRel = files[0]?.webkitRelativePath || '';
     const folderName = firstRel.split('/')[0] || 'CSD Multi-Year Archive';
 
-    loadArchiveFolder(Array.from(files), folderName);
-    e.target.value = '';
+    await loadArchiveFolder(Array.from(files), folderName);
+    setIsArchiveModalOpen(true);
   };
 
   // If no archive folder loaded yet, display a sleek quick-loader banner
@@ -101,7 +101,7 @@ export function DateArchiveNavigator() {
           style={{ padding: '7px 14px', fontSize: '0.78rem' }}
         >
           <FolderOpen size={14} />
-          <span>Select CSD Archive Folder</span>
+          <span>Choose Archive Folder</span>
         </button>
       </div>
     );

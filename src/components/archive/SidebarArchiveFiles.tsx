@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/store/use-app-store';
 import { ArchiveFileInfo } from '@/lib/parser/date-extractor';
 import {
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 
 export function SidebarArchiveFiles() {
+  const router = useRouter();
   const {
     archiveCatalog,
     archiveDateRange,
@@ -54,6 +56,29 @@ export function SidebarArchiveFiles() {
       return true;
     });
   }, [archiveCatalog, archiveDateRange, query]);
+
+  // Group available files date-wise (newest date first)
+  const groupedByDate = useMemo(() => {
+    const map: Record<
+      string,
+      { dateKey: string; humanDate: string; displayDate: string; files: ArchiveFileInfo[] }
+    > = {};
+
+    filteredFiles.forEach((f) => {
+      if (!map[f.dateKey]) {
+        map[f.dateKey] = {
+          dateKey: f.dateKey,
+          humanDate: f.humanDate,
+          displayDate: f.displayDate,
+          files: [],
+        };
+      }
+      map[f.dateKey].files.push(f);
+    });
+
+    const sortedDateKeys = Object.keys(map).sort((a, b) => b.localeCompare(a));
+    return sortedDateKeys.map((k) => map[k]);
+  }, [filteredFiles]);
 
   if (!archiveCatalog || archiveCatalog.totalFiles === 0) {
     return null;
@@ -116,8 +141,10 @@ export function SidebarArchiveFiles() {
             display: 'flex',
             alignItems: 'center',
             gap: '3px',
+            padding: '2px 4px',
+            borderRadius: '4px',
           }}
-          title="Open Visual Calendar Explorer"
+          title="Open Multi-Year CSD Telemetry Archive Explorer"
           onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--atlas-green)')}
           onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--atlas-text-secondary)')}
         >
@@ -307,7 +334,7 @@ export function SidebarArchiveFiles() {
           paddingRight: '2px',
         }}
       >
-        {filteredFiles.length === 0 ? (
+        {groupedByDate.length === 0 ? (
           <div
             style={{
               padding: '20px 8px',
@@ -335,128 +362,155 @@ export function SidebarArchiveFiles() {
             </div>
           </div>
         ) : (
-          filteredFiles.map((f: ArchiveFileInfo) => {
-            const isCurrentlyActive =
-              file?.filename === f.name || selectedArchiveFileId === f.id;
-
-            return (
+          groupedByDate.map((group) => (
+            <div key={group.dateKey} style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '6px' }}>
+              {/* Date Group Header */}
               <div
-                key={f.id}
-                onClick={async () => {
-                  if (isLoading) return;
-                  await loadArchiveFile(f);
-                }}
                 style={{
-                  padding: '6px 8px',
-                  borderRadius: '5px',
-                  background: isCurrentlyActive
-                    ? 'rgba(0, 237, 100, 0.12)'
-                    : 'var(--atlas-surface)',
-                  border: isCurrentlyActive
-                    ? '1px solid #00ed64'
-                    : '1px solid var(--atlas-border)',
-                  cursor: isLoading ? 'wait' : 'pointer',
-                  transition: 'all 0.12s ease',
                   display: 'flex',
-                  flexDirection: 'column',
-                  gap: '2px',
-                  boxShadow: isCurrentlyActive
-                    ? '0 0 10px rgba(0, 237, 100, 0.2)'
-                    : 'none',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '3px 6px',
+                  background: 'rgba(0, 237, 100, 0.05)',
+                  borderRadius: '4px',
+                  borderLeft: '2px solid var(--atlas-green)',
                 }}
-                onMouseEnter={(e) => {
-                  if (!isCurrentlyActive) {
-                    e.currentTarget.style.borderColor = 'rgba(0, 237, 100, 0.4)';
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isCurrentlyActive) {
-                    e.currentTarget.style.borderColor = 'var(--atlas-border)';
-                    e.currentTarget.style.background = 'var(--atlas-surface)';
-                  }
-                }}
-                title={`Click to load ${f.name} (${f.humanDate}) into Data Table`}
               >
-                {/* File Row 1: Filename & Status / Size */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden' }}>
-                    {isCurrentlyActive ? (
-                      <div
-                        style={{
-                          width: '6px',
-                          height: '6px',
-                          borderRadius: '50%',
-                          background: '#00ed64',
-                          boxShadow: '0 0 6px #00ed64',
-                          flexShrink: 0,
-                        }}
-                      />
-                    ) : (
-                      <FileText size={12} color="var(--atlas-text-secondary)" style={{ flexShrink: 0 }} />
-                    )}
-                    <span
-                      className="mono-font"
-                      style={{
-                        fontSize: '0.74rem',
-                        fontWeight: isCurrentlyActive ? 700 : 600,
-                        color: isCurrentlyActive ? 'var(--atlas-green)' : 'var(--atlas-text-primary)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                    >
-                      {f.name}
-                    </span>
-                  </div>
-
-                  <span
-                    style={{
-                      fontSize: '0.62rem',
-                      color: isCurrentlyActive ? 'var(--atlas-green)' : 'var(--atlas-text-secondary)',
-                      fontFamily: 'var(--font-mono)',
-                      flexShrink: 0,
-                      fontWeight: isCurrentlyActive ? 700 : 500,
-                    }}
-                  >
-                    {isCurrentlyActive ? 'ACTIVE' : f.formattedSize}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <Calendar size={10} color="var(--atlas-green)" />
+                  <span style={{ fontSize: '0.66rem', fontWeight: 700, color: 'var(--atlas-green)' }}>
+                    {group.humanDate}
+                  </span>
+                  <span style={{ fontSize: '0.58rem', color: 'var(--atlas-text-secondary)' }}>
+                    ({group.displayDate})
                   </span>
                 </div>
-
-                {/* File Row 2: Human-readable Date & Time / Copy Tag */}
-                <div
+                <span
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    fontSize: '0.64rem',
-                    color: isCurrentlyActive ? 'rgba(0, 237, 100, 0.9)' : 'var(--atlas-text-secondary)',
-                    paddingLeft: '11px',
+                    fontSize: '0.58rem',
+                    padding: '1px 5px',
+                    borderRadius: '3px',
+                    background: 'var(--atlas-surface)',
+                    color: 'var(--atlas-text-secondary)',
+                    fontWeight: 600,
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Calendar size={10} />
-                    <span style={{ fontWeight: 600 }}>{f.humanDate}</span>
-                    <span style={{ opacity: 0.7 }}>({f.displayDate})</span>
-                  </div>
-
-                  {f.timeTag && (
-                    <span
-                      style={{
-                        fontSize: '0.58rem',
-                        padding: '0 4px',
-                        borderRadius: '3px',
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        border: '1px solid rgba(255, 255, 255, 0.08)',
-                      }}
-                    >
-                      {f.timeTag}
-                    </span>
-                  )}
-                </div>
+                  {group.files.length} file{group.files.length > 1 ? 's' : ''}
+                </span>
               </div>
-            );
-          })
+
+              {/* Files on this Date */}
+              {group.files.map((f: ArchiveFileInfo) => {
+                const isCurrentlyActive =
+                  file?.filename === f.name || selectedArchiveFileId === f.id;
+
+                return (
+                  <div
+                    key={f.id}
+                    onClick={async () => {
+                      if (isLoading) return;
+                      await loadArchiveFile(f);
+                      router.push('/table');
+                    }}
+                    style={{
+                      padding: '6px 8px',
+                      borderRadius: '5px',
+                      background: isCurrentlyActive
+                        ? 'rgba(0, 237, 100, 0.12)'
+                        : 'var(--atlas-surface)',
+                      border: isCurrentlyActive
+                        ? '1px solid #00ed64'
+                        : '1px solid var(--atlas-border)',
+                      cursor: isLoading ? 'wait' : 'pointer',
+                      transition: 'all 0.12s ease',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                      boxShadow: isCurrentlyActive
+                        ? '0 0 10px rgba(0, 237, 100, 0.2)'
+                        : 'none',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isCurrentlyActive) {
+                        e.currentTarget.style.borderColor = 'rgba(0, 237, 100, 0.4)';
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isCurrentlyActive) {
+                        e.currentTarget.style.borderColor = 'var(--atlas-border)';
+                        e.currentTarget.style.background = 'var(--atlas-surface)';
+                      }
+                    }}
+                    title={`Click to load ${f.name} into Data Table`}
+                  >
+                    {/* File Row: Filename & Status / Size */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden' }}>
+                        {isCurrentlyActive ? (
+                          <div
+                            style={{
+                              width: '6px',
+                              height: '6px',
+                              borderRadius: '50%',
+                              background: '#00ed64',
+                              boxShadow: '0 0 6px #00ed64',
+                              flexShrink: 0,
+                            }}
+                          />
+                        ) : (
+                          <FileText size={12} color="var(--atlas-text-secondary)" style={{ flexShrink: 0 }} />
+                        )}
+                        <span
+                          className="mono-font"
+                          style={{
+                            fontSize: '0.74rem',
+                            fontWeight: isCurrentlyActive ? 700 : 600,
+                            color: isCurrentlyActive ? 'var(--atlas-green)' : 'var(--atlas-text-primary)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {f.name}
+                        </span>
+                      </div>
+
+                      <span
+                        style={{
+                          fontSize: '0.62rem',
+                          color: isCurrentlyActive ? 'var(--atlas-green)' : 'var(--atlas-text-secondary)',
+                          fontFamily: 'var(--font-mono)',
+                          flexShrink: 0,
+                          fontWeight: isCurrentlyActive ? 700 : 500,
+                        }}
+                      >
+                        {isCurrentlyActive ? 'ACTIVE' : f.formattedSize}
+                      </span>
+                    </div>
+
+                    {/* Secondary tag if copy / hour */}
+                    {f.timeTag && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', fontSize: '0.6rem' }}>
+                        <span
+                          style={{
+                            fontSize: '0.58rem',
+                            padding: '0 4px',
+                            borderRadius: '3px',
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            color: 'var(--atlas-text-secondary)',
+                          }}
+                        >
+                          {f.timeTag}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ))
         )}
       </div>
     </div>

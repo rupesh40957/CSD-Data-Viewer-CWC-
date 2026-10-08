@@ -138,14 +138,13 @@ export function DataTable() {
           directory=""
           multiple
           style={{ display: 'none' }}
-          onChange={(e) => {
+          onChange={async (e) => {
             const files = e.target.files;
             if (!files || files.length === 0) return;
             const firstRel = files[0]?.webkitRelativePath || '';
             const folderName = firstRel.split('/')[0] || 'CSD Multi-Year Archive';
-            loadArchiveFolder(Array.from(files), folderName);
+            await loadArchiveFolder(Array.from(files), folderName);
             setIsArchiveModalOpen(true);
-            e.target.value = '';
           }}
         />
         <h3 style={{ color: 'var(--text-dim)', marginBottom: '8px' }}>No Data Loaded</h3>

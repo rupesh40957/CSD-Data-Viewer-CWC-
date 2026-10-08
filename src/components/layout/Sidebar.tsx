@@ -761,7 +761,7 @@ export function Sidebar() {
   };
 
   // Handle directory selection
-  const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFolderChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
@@ -774,28 +774,15 @@ export function Sidebar() {
       }
     }
 
-    if (csdFiles.length === 1) {
-      // Single file found, load directly
-      const single = csdFiles[0];
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const buffer = event.target?.result as ArrayBuffer;
-        if (buffer) {
-          parseFileBuffer(buffer, single.name, single.size);
-        }
-      };
-      reader.readAsArrayBuffer(single);
-    } else if (csdFiles.length > 1) {
-      // Multiple files found: dynamically index multi-year archive
+    if (csdFiles.length >= 1) {
+      // Dynamically index multi-year archive folder and open Explorer
       const firstRel = csdFiles[0]?.webkitRelativePath || '';
       const folderName = firstRel.split('/')[0] || 'CSD Multi-Year Archive';
-      loadArchiveFolder(csdFiles, folderName);
+      await loadArchiveFolder(csdFiles, folderName);
       setIsArchiveModalOpen(true);
     } else {
       alert('No .csd or .txt telemetry files found in the chosen folder.');
     }
-
-    e.target.value = '';
   };
 
   const stations = file?.stations || [];

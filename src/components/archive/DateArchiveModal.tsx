@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/store/use-app-store';
 import {
@@ -16,6 +16,8 @@ import {
   ChevronRight,
   HardDrive,
   Sparkles,
+  SlidersHorizontal,
+  RotateCcw,
 } from 'lucide-react';
 
 const MONTH_NAMES = [
@@ -39,6 +41,8 @@ export function DateArchiveModal() {
     archiveCatalog,
     selectedArchiveDate,
     selectedArchiveFileId,
+    archiveDateRange,
+    setArchiveDateRange,
     loadArchiveFolder,
     selectArchiveDate,
     loadArchiveFile,
@@ -77,17 +81,14 @@ export function DateArchiveModal() {
     }
   }, [selectedArchiveDate, archiveCatalog]);
 
-  if (!isArchiveModalOpen) return null;
-
-  const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFolderChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     const firstRel = files[0]?.webkitRelativePath || '';
     const folderName = firstRel.split('/')[0] || 'CSD Multi-Year Archive';
 
-    loadArchiveFolder(Array.from(files), folderName);
-    e.target.value = '';
+    await loadArchiveFolder(Array.from(files), folderName);
   };
 
   // Days in month calculation
@@ -103,6 +104,18 @@ export function DateArchiveModal() {
     ? archiveCatalog.dateFileMap[selectedArchiveDate] || []
     : [];
 
+  const rangeFrom = archiveDateRange?.from?.trim() || '';
+  const rangeTo = archiveDateRange?.to?.trim() || '';
+
+  const filesInRange = useMemo(() => {
+    if (!archiveCatalog || !archiveCatalog.files) return [];
+    return archiveCatalog.files.filter((f) => {
+      if (rangeFrom && f.dateKey < rangeFrom) return false;
+      if (rangeTo && f.dateKey > rangeTo) return false;
+      return true;
+    });
+  }, [archiveCatalog, rangeFrom, rangeTo]);
+
   const handleDayClick = (day: number) => {
     const dateKey = `${viewYear}-${String(viewMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     selectArchiveDate(dateKey);
@@ -113,6 +126,8 @@ export function DateArchiveModal() {
     setIsArchiveModalOpen(false);
     router.push('/table');
   };
+
+  if (!isArchiveModalOpen) return null;
 
   return (
     <div
@@ -264,15 +279,188 @@ export function DateArchiveModal() {
             </div>
           </div>
         ) : (
-          /* Main Multi-Year Calendar & Files View */
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 340px',
-              minHeight: '480px',
-              overflowY: 'auto',
-            }}
-          >
+          <>
+            {/* ─── Dedicated Date Range Selection Controls inside Explorer ─── */}
+            <div
+              style={{
+                padding: '12px 20px',
+                background: 'linear-gradient(135deg, rgba(13, 21, 39, 0.95), rgba(17, 28, 53, 0.9))',
+                borderBottom: '1px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+              }}
+            >
+              {/* Left: From Date & To Date Pickers */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                  <SlidersHorizontal size={15} color="var(--primary-light)" />
+                  <span
+                    style={{
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      color: 'var(--text-main)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                    }}
+                  >
+                    Date Range Filter
+                  </span>
+                </div>
+
+                {/* From Date */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                    From:
+                  </label>
+                  <input
+                    type="date"
+                    value={archiveDateRange?.from || ''}
+                    min={archiveCatalog.minDate || undefined}
+                    max={archiveCatalog.maxDate || undefined}
+                    onChange={(e) =>
+                      setArchiveDateRange({
+                        from: e.target.value,
+                        to: archiveDateRange?.to || '',
+                      })
+                    }
+                    className="mono-font"
+                    style={{
+                      padding: '4px 8px',
+                      fontSize: '0.74rem',
+                      borderRadius: '5px',
+                      background: 'var(--bg-app)',
+                      border: '1px solid var(--border-focus)',
+                      color: 'var(--text-main)',
+                      outline: 'none',
+                      cursor: 'pointer',
+                    }}
+                  />
+                </div>
+
+                {/* To Date */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                    To:
+                  </label>
+                  <input
+                    type="date"
+                    value={archiveDateRange?.to || ''}
+                    min={archiveCatalog.minDate || undefined}
+                    max={archiveCatalog.maxDate || undefined}
+                    onChange={(e) =>
+                      setArchiveDateRange({
+                        from: archiveDateRange?.from || '',
+                        to: e.target.value,
+                      })
+                    }
+                    className="mono-font"
+                    style={{
+                      padding: '4px 8px',
+                      fontSize: '0.74rem',
+                      borderRadius: '5px',
+                      background: 'var(--bg-app)',
+                      border: '1px solid var(--border-focus)',
+                      color: 'var(--text-main)',
+                      outline: 'none',
+                      cursor: 'pointer',
+                    }}
+                  />
+                </div>
+
+                {/* Quick Presets */}
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setArchiveDateRange({
+                        from: archiveCatalog.minDate || '',
+                        to: archiveCatalog.maxDate || '',
+                      })
+                    }
+                    className="btn-secondary"
+                    style={{ padding: '3px 8px', fontSize: '0.68rem' }}
+                    title="Select all available dates in archive"
+                  >
+                    All Dates
+                  </button>
+                  {viewYear && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setArchiveDateRange({
+                          from: `${viewYear}-01-01`,
+                          to: `${viewYear}-12-31`,
+                        })
+                      }
+                      className="btn-secondary"
+                      style={{ padding: '3px 8px', fontSize: '0.68rem' }}
+                      title={`Filter to year ${viewYear}`}
+                    >
+                      Year {viewYear}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setArchiveDateRange({ from: '', to: '' })}
+                    className="btn-secondary"
+                    style={{ padding: '3px 8px', fontSize: '0.68rem' }}
+                    title="Clear date range filters"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              {/* Right: Files Count Badge & Apply Action */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    fontSize: '0.72rem',
+                    padding: '4px 10px',
+                    borderRadius: '20px',
+                    background: 'rgba(0, 237, 100, 0.08)',
+                    border: '1px solid rgba(0, 237, 100, 0.25)',
+                    color: 'var(--atlas-green)',
+                    fontWeight: 600,
+                  }}
+                >
+                  {filesInRange.length} of {archiveCatalog.totalFiles} files in range
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsArchiveModalOpen(false);
+                    router.push('/table');
+                  }}
+                  className="btn-primary"
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: '0.75rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 0 12px rgba(0, 237, 100, 0.25)',
+                  }}
+                >
+                  <span>Apply & View in Sidebar / Table</span>
+                  <ArrowRight size={13} />
+                </button>
+              </div>
+            </div>
+
+            {/* Main Multi-Year Calendar & Files View */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 340px',
+                minHeight: '480px',
+                overflowY: 'auto',
+              }}
+            >
             {/* Left: Dynamic Year Tabs, Month Chooser & Calendar Grid */}
             <div style={{ padding: '20px', borderRight: '1px solid var(--border)', overflowY: 'auto' }}>
               {/* Dynamic Year Pills */}
@@ -538,7 +726,8 @@ export function DateArchiveModal() {
               </div>
             </div>
           </div>
-        )}
+        </>
+      )}
       </div>
     </div>
   );
