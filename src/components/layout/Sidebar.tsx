@@ -40,8 +40,10 @@ import {
   Folder,
   HardDrive,
   Check,
+  Calendar,
 } from 'lucide-react';
 import { StationHierarchyTree } from '@/components/stations/StationHierarchyTree';
+import { SidebarArchiveFiles } from '@/components/archive/SidebarArchiveFiles';
 
 /* ─────────────────────────────────────────────────────────────
    MongoDB Atlas Collapsible Category Section
@@ -163,12 +165,125 @@ function AtlasEmptyState({
   onChooseFile,
   onChooseFolder,
   onOpenPathModal,
+  onOpenArchiveModal,
 }: {
   onChooseFile: () => void;
   onChooseFolder: () => void;
   onOpenPathModal: () => void;
+  onOpenArchiveModal: () => void;
 }) {
-  const { isLoading, parseProgress } = useAppStore();
+  const { isLoading, parseProgress, archiveCatalog } = useAppStore();
+
+  // If multi-year archive is already loaded, show active archive panel
+  if (archiveCatalog && archiveCatalog.totalFiles > 0) {
+    return (
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '28px 16px',
+          textAlign: 'center',
+          gap: '14px',
+        }}
+      >
+        <div
+          style={{
+            width: '54px',
+            height: '54px',
+            borderRadius: '12px',
+            background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(2, 132, 199, 0.35))',
+            border: '1px solid rgba(56, 189, 248, 0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 0 20px rgba(56, 189, 248, 0.25)',
+          }}
+        >
+          <Calendar size={26} color="var(--primary-light)" />
+        </div>
+
+        <div>
+          <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '4px' }}>
+            {archiveCatalog.folderName}
+          </div>
+          <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.5, maxWidth: '240px' }}>
+            {archiveCatalog.totalFiles} files across {archiveCatalog.availableYears.length} dynamic years ({archiveCatalog.availableYears.join(', ')}).
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', maxWidth: '220px' }}>
+          <button
+            onClick={onOpenArchiveModal}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '9px 16px',
+              borderRadius: '6px',
+              background: 'linear-gradient(135deg, rgba(2, 132, 199, 0.9), rgba(6, 182, 212, 0.9))',
+              color: '#ffffff',
+              border: '1px solid rgba(56, 189, 248, 0.5)',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              boxShadow: '0 4px 14px rgba(2, 132, 199, 0.4)',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <Calendar size={15} />
+            <span>Open Calendar Explorer</span>
+          </button>
+
+          <Link
+            href="/table"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '8px 14px',
+              borderRadius: '6px',
+              background: 'var(--atlas-card)',
+              color: 'var(--atlas-text-primary)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              fontSize: '0.78rem',
+              fontWeight: 500,
+              textDecoration: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <TableIcon size={14} color="var(--primary-light)" />
+            <span>View Data Table</span>
+          </Link>
+
+          <button
+            onClick={onChooseFolder}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '7px 12px',
+              borderRadius: '6px',
+              background: 'transparent',
+              color: 'var(--atlas-text-secondary)',
+              border: '1px dashed rgba(255, 255, 255, 0.15)',
+              fontSize: '0.72rem',
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+          >
+            <FolderOpen size={13} />
+            <span>Change Archive Folder</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -205,7 +320,7 @@ function AtlasEmptyState({
           No Telemetry Connected
         </div>
         <div style={{ fontSize: '0.74rem', color: 'var(--atlas-text-secondary)', lineHeight: 1.5, maxWidth: '240px' }}>
-          Select a <code style={{ color: 'var(--atlas-green)', fontFamily: 'var(--font-mono)' }}>.csd</code> file or browse a local directory path to begin telemetry analysis.
+          Select a single <code style={{ color: 'var(--atlas-green)', fontFamily: 'var(--font-mono)' }}>.csd</code> file or choose a folder containing 1-5+ years of CSD telemetry archive.
         </div>
       </div>
 
@@ -237,9 +352,9 @@ function AtlasEmptyState({
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', maxWidth: '220px' }}>
-          {/* File Upload Button */}
+          {/* Multi-Year Directory Chooser Button (Prominent) */}
           <button
-            onClick={onChooseFile}
+            onClick={onChooseFolder}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -247,25 +362,24 @@ function AtlasEmptyState({
               gap: '8px',
               padding: '9px 16px',
               borderRadius: '6px',
-              background: 'var(--atlas-green-dark)',
+              background: 'linear-gradient(135deg, rgba(2, 132, 199, 0.85), rgba(6, 182, 212, 0.85))',
               color: '#ffffff',
-              border: '1px solid #00ed64',
+              border: '1px solid rgba(56, 189, 248, 0.5)',
               fontSize: '0.8rem',
               fontWeight: 600,
               cursor: 'pointer',
-              boxShadow: '0 4px 14px rgba(0, 104, 74, 0.4)',
+              boxShadow: '0 4px 14px rgba(2, 132, 199, 0.35)',
               transition: 'all 0.15s ease',
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--atlas-green-dark)')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--atlas-green-dark)')}
+            title="Select a folder containing 1 or multiple years of .csd files"
           >
-            <UploadCloud size={15} color="var(--atlas-green)" />
-            <span>Upload CSD File</span>
+            <FolderOpen size={15} color="#ffffff" />
+            <span>Choose CSD Archive Folder</span>
           </button>
 
-          {/* Directory Chooser Button */}
+          {/* Single File Upload Button */}
           <button
-            onClick={onChooseFolder}
+            onClick={onChooseFile}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -284,8 +398,8 @@ function AtlasEmptyState({
             onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--atlas-green)')}
             onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)')}
           >
-            <FolderOpen size={14} color="var(--atlas-green)" />
-            <span>Choose Folder</span>
+            <UploadCloud size={14} color="var(--atlas-green)" />
+            <span>Upload Single .csd File</span>
           </button>
 
           {/* Enter Path Button */}
@@ -573,6 +687,9 @@ export function Sidebar() {
     setSidebarWidth,
     isSidebarCollapsed,
     setIsSidebarCollapsed,
+    archiveCatalog,
+    loadArchiveFolder,
+    setIsArchiveModalOpen,
   } = useAppStore();
 
   const [search, setSearch] = useState('');
@@ -669,9 +786,11 @@ export function Sidebar() {
       };
       reader.readAsArrayBuffer(single);
     } else if (csdFiles.length > 1) {
-      // Multiple files found, show selector dialog
-      setDiscoveredFiles(csdFiles);
-      setPathModalOpen(true);
+      // Multiple files found: dynamically index multi-year archive
+      const firstRel = csdFiles[0]?.webkitRelativePath || '';
+      const folderName = firstRel.split('/')[0] || 'CSD Multi-Year Archive';
+      loadArchiveFolder(csdFiles, folderName);
+      setIsArchiveModalOpen(true);
     } else {
       alert('No .csd or .txt telemetry files found in the chosen folder.');
     }
@@ -1089,43 +1208,67 @@ export function Sidebar() {
               </div>
             </>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f59e0b' }} />
-                <span style={{ fontSize: '0.74rem', color: 'var(--atlas-text-secondary)', fontWeight: 600 }}>No Dataset Loaded</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f59e0b' }} />
+                  <span style={{ fontSize: '0.74rem', color: 'var(--atlas-text-secondary)', fontWeight: 600 }}>No Dataset Loaded</span>
+                </div>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{
+                      background: 'var(--atlas-green-dark)',
+                      border: '1px solid #00ed64',
+                      color: '#fff',
+                      borderRadius: '4px',
+                      padding: '2px 8px',
+                      fontSize: '0.65rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Upload
+                  </button>
+                  <button
+                    onClick={() => folderInputRef.current?.click()}
+                    style={{
+                      background: 'var(--atlas-surface)',
+                      border: '1px solid var(--atlas-border)',
+                      color: 'var(--atlas-text-secondary)',
+                      borderRadius: '4px',
+                      padding: '2px 8px',
+                      fontSize: '0.65rem',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Folder
+                  </button>
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
+
+              {/* Multi-Year Archive indicator if loaded */}
+              {archiveCatalog && archiveCatalog.totalFiles > 0 && (
+                <div
+                  onClick={() => setIsArchiveModalOpen(true)}
                   style={{
-                    background: 'var(--atlas-green-dark)',
-                    border: '1px solid #00ed64',
-                    color: '#fff',
+                    padding: '6px 8px',
                     borderRadius: '4px',
-                    padding: '2px 8px',
-                    fontSize: '0.65rem',
-                    fontWeight: 600,
+                    background: 'rgba(56, 189, 248, 0.08)',
+                    border: '1px solid rgba(56, 189, 248, 0.25)',
                     cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
                   }}
                 >
-                  Upload
-                </button>
-                <button
-                  onClick={() => folderInputRef.current?.click()}
-                  style={{
-                    background: 'var(--atlas-surface)',
-                    border: '1px solid var(--atlas-border)',
-                    color: 'var(--atlas-text-secondary)',
-                    borderRadius: '4px',
-                    padding: '2px 8px',
-                    fontSize: '0.65rem',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Path
-                </button>
-              </div>
+                  <div style={{ fontSize: '0.68rem', color: 'var(--primary-light)', fontWeight: 600 }}>
+                    📅 Archive: {archiveCatalog.totalFiles} files ({archiveCatalog.availableYears.length} Yrs)
+                  </div>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--atlas-text-secondary)' }}>&rarr;</span>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1139,15 +1282,23 @@ export function Sidebar() {
             flex: 1,
           }}
         >
+          {/* Multi-Year Date Archive Dynamic Range & Available Files */}
+          {archiveCatalog && archiveCatalog.totalFiles > 0 && (
+            <SidebarArchiveFiles />
+          )}
+
           {!file ? (
-            <AtlasEmptyState
-              onChooseFile={() => fileInputRef.current?.click()}
-              onChooseFolder={() => folderInputRef.current?.click()}
-              onOpenPathModal={() => {
-                setDiscoveredFiles([]);
-                setPathModalOpen(true);
-              }}
-            />
+            (!archiveCatalog || archiveCatalog.totalFiles === 0) ? (
+              <AtlasEmptyState
+                onChooseFile={() => fileInputRef.current?.click()}
+                onChooseFolder={() => folderInputRef.current?.click()}
+                onOpenArchiveModal={() => setIsArchiveModalOpen(true)}
+                onOpenPathModal={() => {
+                  setDiscoveredFiles([]);
+                  setPathModalOpen(true);
+                }}
+              />
+            ) : null
           ) : (
             <>
               {/* 1. DATABASE & EXPLORER */}

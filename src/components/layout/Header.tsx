@@ -19,6 +19,7 @@ import {
   Settings,
   FolderOpen,
   Radio,
+  Calendar,
 } from 'lucide-react';
 import { ExportOptionsModal } from '@/components/export/ExportOptionsModal';
 
@@ -32,6 +33,8 @@ export function Header() {
     isLoading,
     setIsSettingsOpen,
     setIsImportModalOpen,
+    setIsArchiveModalOpen,
+    archiveCatalog,
   } = useAppStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [exportModalOpen, setExportModalOpen] = useState(false);
@@ -217,6 +220,27 @@ export function Header() {
         >
           <FolderOpen size={14} color="var(--primary-light)" />
           <span>Load File</span>
+        </button>
+
+        {/* Date Archive button */}
+        <button
+          onClick={() => setIsArchiveModalOpen(true)}
+          className="btn-secondary"
+          title="Browse multi-year CSD telemetry date archive"
+          style={{
+            padding: '6px 12px',
+            fontSize: '0.8rem',
+            background: archiveCatalog && archiveCatalog.totalFiles > 0 ? 'rgba(56, 189, 248, 0.12)' : undefined,
+            borderColor: archiveCatalog && archiveCatalog.totalFiles > 0 ? 'rgba(56, 189, 248, 0.4)' : undefined,
+            color: archiveCatalog && archiveCatalog.totalFiles > 0 ? 'var(--primary-light)' : undefined,
+          }}
+        >
+          <Calendar size={14} color="var(--primary-light)" />
+          <span>
+            {archiveCatalog && archiveCatalog.totalFiles > 0
+              ? `Archive (${archiveCatalog.availableYears.length} Yrs)`
+              : 'Date Archive'}
+          </span>
         </button>
 
         {file && (

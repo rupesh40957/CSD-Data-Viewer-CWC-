@@ -27,6 +27,7 @@ import {
   Layers,
   ShieldCheck,
   FileCheck,
+  FolderOpen,
 } from 'lucide-react';
 
 export type ImportState = 'idle' | 'selected' | 'parsing' | 'completed' | 'failed';
@@ -44,7 +45,12 @@ export function FileUploader({ isModal = false, onClose }: FileUploaderProps) {
     clearFile,
     stationMasterMap,
     setIsImportModalOpen,
+    setIsArchiveModalOpen,
+    loadArchiveFolder,
+    archiveCatalog,
   } = useAppStore();
+
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   const [importState, setImportState] = useState<ImportState>(file ? 'completed' : 'idle');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -210,6 +216,28 @@ export function FileUploader({ isModal = false, onClose }: FileUploaderProps) {
         }}
       />
 
+      {/* Hidden Folder Input for Multi-Year Archive */}
+      <input
+        type="file"
+        ref={folderInputRef}
+        // @ts-expect-error webkitdirectory
+        webkitdirectory="true"
+        directory=""
+        multiple
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const files = e.target.files;
+          if (!files || files.length === 0) return;
+          const firstRel = files[0]?.webkitRelativePath || '';
+          const folderName = firstRel.split('/')[0] || 'CSD Multi-Year Archive';
+          loadArchiveFolder(Array.from(files), folderName);
+          if (onClose) onClose();
+          setIsImportModalOpen(false);
+          setIsArchiveModalOpen(true);
+          e.target.value = '';
+        }}
+      />
+
       {/* Main Glass Panel Card */}
       <div
         className="glass-panel"
@@ -322,6 +350,28 @@ export function FileUploader({ isModal = false, onClose }: FileUploaderProps) {
                   <span>Browse .csd File</span>
                 </button>
 
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (archiveCatalog && archiveCatalog.totalFiles > 0) {
+                      if (onClose) onClose();
+                      setIsImportModalOpen(false);
+                      setIsArchiveModalOpen(true);
+                    } else {
+                      folderInputRef.current?.click();
+                    }
+                  }}
+                  style={{ padding: '8px 18px', fontSize: '0.84rem' }}
+                >
+                  <FolderOpen size={16} color="var(--primary-light)" />
+                  <span>
+                    {archiveCatalog && archiveCatalog.totalFiles > 0
+                      ? `Open Archive (${archiveCatalog.availableYears.length} Yrs)`
+                      : 'Browse Date Archive Folder'}
+                  </span>
+                </button>
               </div>
             </div>
 

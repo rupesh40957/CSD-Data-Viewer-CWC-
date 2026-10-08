@@ -87,37 +87,29 @@ export function TelemetryQuickView() {
       </div>
 
       {/* Stream Table */}
-      <div style={{ overflowX: 'auto', width: '100%' }}>
+      <div style={{ overflowX: 'auto', width: '100%', border: '1px solid var(--table-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
         <table
+          className="csd-grid-table"
           style={{
             width: '100%',
-            borderCollapse: 'collapse',
             fontSize: '0.8rem',
             textAlign: 'left',
           }}
         >
           <thead>
-            <tr
-              style={{
-                borderBottom: '1px solid var(--border)',
-                color: 'var(--text-dim)',
-                fontSize: '0.7rem',
-                textTransform: 'uppercase',
-                letterSpacing: '0.04em',
-              }}
-            >
-              <th style={{ padding: '8px 12px' }}>Line #</th>
-              <th style={{ padding: '8px 12px' }}>Timestamp (IST)</th>
-              <th style={{ padding: '8px 12px' }}>Station ID</th>
-              <th style={{ padding: '8px 12px' }}>Carrier Lock</th>
-              <th style={{ padding: '8px 12px' }}>Record Type (H)</th>
-              <th style={{ padding: '8px 12px', textAlign: 'right' }}>s16 (Float)</th>
-              <th style={{ padding: '8px 12px', textAlign: 'right' }}>RF Signal Power</th>
-              <th style={{ padding: '8px 12px', textAlign: 'center' }}>Quality</th>
+            <tr>
+              <th className="csd-th" style={{ padding: '8px 12px' }}>Line #</th>
+              <th className="csd-th" style={{ padding: '8px 12px' }}>Timestamp (IST)</th>
+              <th className="csd-th" style={{ padding: '8px 12px' }}>Station ID</th>
+              <th className="csd-th" style={{ padding: '8px 12px' }}>Carrier Lock</th>
+              <th className="csd-th" style={{ padding: '8px 12px' }}>Record Type (H)</th>
+              <th className="csd-th" style={{ padding: '8px 12px', textAlign: 'right' }}>s16 (Float)</th>
+              <th className="csd-th" style={{ padding: '8px 12px', textAlign: 'right' }}>RF Signal Power</th>
+              <th className="csd-th" style={{ padding: '8px 12px', textAlign: 'center' }}>Quality</th>
             </tr>
           </thead>
           <tbody>
-            {recentRecords.map((r) => {
+            {recentRecords.map((r, idx) => {
               const isLocked = r.status === 'L';
               const isUnlocked = r.status === 'U';
               const isCorrupt = r.status === '$' || r.quality === 'Bad';
@@ -125,24 +117,15 @@ export function TelemetryQuickView() {
               return (
                 <tr
                   key={r.id}
-                  style={{
-                    borderBottom: '1px solid var(--border)',
-                    transition: 'background 0.12s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = 'var(--bg-surface-hover)';
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = 'transparent';
-                  }}
+                  className={`csd-tr ${idx % 2 === 0 ? 'csd-tr-even' : 'csd-tr-odd'} ${isCorrupt ? 'bad-row' : ''}`}
                 >
-                  <td style={{ padding: '9px 12px' }} className="mono-font">
+                  <td className="csd-td mono-font" style={{ padding: '9px 12px' }}>
                     <span style={{ color: 'var(--text-dim)' }}>#{r.lineNumber}</span>
                   </td>
-                  <td style={{ padding: '9px 12px' }} className="mono-font">
+                  <td className="csd-td mono-font" style={{ padding: '9px 12px' }}>
                     {formatCsdTimestamp(r.timestamp, false)}
                   </td>
-                  <td style={{ padding: '9px 12px' }}>
+                  <td className="csd-td" style={{ padding: '9px 12px' }}>
                     <span
                       className="mono-font"
                       style={{
@@ -156,7 +139,7 @@ export function TelemetryQuickView() {
                       {r.stationId}
                     </span>
                   </td>
-                  <td style={{ padding: '9px 12px' }}>
+                  <td className="csd-td" style={{ padding: '9px 12px' }}>
                     <span
                       className={`badge ${
                         isLocked ? 'badge-locked' : isUnlocked ? 'badge-unlocked' : 'badge-corrupt'
@@ -166,24 +149,24 @@ export function TelemetryQuickView() {
                       {isLocked ? 'L (Locked)' : isUnlocked ? 'U (Unlocked)' : '$ (Noise)'}
                     </span>
                   </td>
-                  <td style={{ padding: '9px 12px' }} className="mono-font">
+                  <td className="csd-td mono-font" style={{ padding: '9px 12px' }}>
                     {r.h ? `H:${r.h}` : '--'}
                   </td>
-                  <td style={{ padding: '9px 12px', textAlign: 'right' }} className="mono-font">
+                  <td className="csd-td mono-font" style={{ padding: '9px 12px', textAlign: 'right' }}>
                     {r.s16 !== null ? (
                       <strong style={{ color: 'var(--text-main)' }}>{r.s16.toFixed(3)}</strong>
                     ) : (
                       <span style={{ color: 'var(--quality-bad)' }}>$$</span>
                     )}
                   </td>
-                  <td style={{ padding: '9px 12px', textAlign: 'right' }} className="mono-font">
+                  <td className="csd-td mono-font" style={{ padding: '9px 12px', textAlign: 'right' }}>
                     {r.signal.power !== undefined ? (
                       <span style={{ color: 'var(--accent-teal)' }}>{r.signal.power} dB</span>
                     ) : (
                       '--'
                     )}
                   </td>
-                  <td style={{ padding: '9px 12px', textAlign: 'center' }}>
+                  <td className="csd-td" style={{ padding: '9px 12px', textAlign: 'center' }}>
                     <span
                       className={`badge ${r.quality === 'Good' ? 'badge-good' : 'badge-bad'}`}
                       style={{ padding: '1px 6px', fontSize: '0.66rem' }}

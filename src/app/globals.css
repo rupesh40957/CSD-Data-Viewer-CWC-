@@ -37,8 +37,19 @@
   --status-unlocked: #f59e0b;
   --status-corrupt: #ef4444;
 
-  --border: rgba(148, 163, 184, 0.12);
-  --border-focus: rgba(56, 189, 248, 0.4);
+  --border: rgba(148, 163, 184, 0.16);
+  --border-focus: rgba(56, 189, 248, 0.45);
+
+  /* Data Table Grid Tokens - Dark Mode */
+  --table-border: rgba(148, 163, 184, 0.22);
+  --table-border-subtle: rgba(148, 163, 184, 0.12);
+  --table-border-header: rgba(56, 189, 248, 0.45);
+  --table-header-bg: #0d162a;
+  --table-header-eng-bg: rgba(139, 92, 246, 0.12);
+  --table-row-even: rgba(17, 28, 53, 0.45);
+  --table-row-odd: rgba(11, 19, 36, 0.7);
+  --table-row-hover: rgba(56, 189, 248, 0.1);
+  --table-row-selected: rgba(56, 189, 248, 0.2);
 
   /* Categorization / Hierarchy Tags - Dark Mode */
   --tag-purple: #c084fc;
@@ -116,8 +127,19 @@
   --status-unlocked: #d97706;
   --status-corrupt: #dc2626;
 
-  --border: rgba(148, 163, 184, 0.25);
+  --border: rgba(148, 163, 184, 0.3);
   --border-focus: rgba(2, 132, 199, 0.5);
+
+  /* Data Table Grid Tokens - Light Mode */
+  --table-border: #cbd5e1;
+  --table-border-subtle: #e2e8f0;
+  --table-border-header: #0284c7;
+  --table-header-bg: #f1f5f9;
+  --table-header-eng-bg: rgba(139, 92, 246, 0.08);
+  --table-row-even: #ffffff;
+  --table-row-odd: #f8fafc;
+  --table-row-hover: rgba(2, 132, 199, 0.07);
+  --table-row-selected: rgba(2, 132, 199, 0.14);
 
   /* Categorization / Hierarchy Tags - Light Mode (High Contrast) */
   --tag-purple: #7e22ce;
@@ -365,4 +387,129 @@ body::after {
   background: var(--quality-good);
   display: inline-block;
   animation: pulse-dot 2s infinite;
+}
+
+/* ============================================================
+   PREMIUM DATA GRID & TABLE STYLES
+   ============================================================ */
+.csd-table-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--table-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.csd-table-scroll-container {
+  overflow-x: auto;
+  overflow-y: auto;
+  width: 100%;
+  max-height: calc(100vh - 240px);
+  position: relative;
+}
+
+.csd-grid-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.76rem;
+  text-align: left;
+}
+
+.csd-th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--table-header-bg);
+  color: var(--text-dim);
+  font-size: 0.71rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 10px 12px;
+  border-bottom: 2px solid var(--table-border-header);
+  border-right: 1px solid var(--table-border);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.csd-th:last-child {
+  border-right: none;
+}
+
+.csd-th-eng {
+  background: var(--table-header-eng-bg) !important;
+  border-bottom: 2px solid #8b5cf6 !important;
+}
+
+.csd-tr {
+  height: 36px;
+  transition: background 0.12s ease;
+  cursor: pointer;
+}
+
+.csd-tr-even {
+  background: var(--table-row-even);
+}
+
+.csd-tr-odd {
+  background: var(--table-row-odd);
+}
+
+.csd-tr:hover {
+  background: var(--table-row-hover) !important;
+}
+
+.csd-tr.selected {
+  background: var(--table-row-selected) !important;
+}
+
+.csd-tr.bad-row {
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.csd-tr.bad-row:hover {
+  background: rgba(239, 68, 68, 0.12) !important;
+}
+
+.csd-td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--table-border);
+  border-right: 1px solid var(--table-border);
+  vertical-align: middle;
+  font-size: 0.76rem;
+}
+
+.csd-td:last-child {
+  border-right: none;
+}
+
+.csd-td-eng {
+  background: rgba(139, 92, 246, 0.025);
+}
+
+.csd-line-badge {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: rgba(148, 163, 184, 0.08);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--table-border-subtle);
+  display: inline-block;
+  min-width: 32px;
+  text-align: center;
+}
+
+/* High contrast grid mode */
+.csd-grid-table.high-contrast .csd-th,
+.csd-grid-table.high-contrast .csd-td {
+  border-right: 1px solid rgba(148, 163, 184, 0.38);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.38);
 }

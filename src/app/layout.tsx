@@ -8,6 +8,7 @@ import { StationDetailsModal } from '@/components/dashboard/StationDetailsModal'
 import { UnmappedStationsModal } from '@/components/dashboard/UnmappedStationsModal';
 import { FileImportModal } from '@/components/upload/FileImportModal';
 import { InsatConfigPanel } from '@/components/dashboard/InsatConfigPanel';
+import { DateArchiveModal } from '@/components/archive/DateArchiveModal';
 
 export const metadata: Metadata = {
   title: 'CSD Data Viewer — Hydrometeorological & Industrial AWS Telemetry',
@@ -35,6 +36,7 @@ export default function RootLayout({
           <UnmappedStationsModal />
           <FileImportModal />
           <InsatConfigPanel />
+          <DateArchiveModal />
         </div>
       </body>
     </html>

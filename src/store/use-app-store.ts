@@ -23,6 +23,11 @@ import {
 import { InsatSensorConfig, InsatSensorProfile } from '@/lib/insat/types';
 import { DEFAULT_INSAT_SENSORS, DEFAULT_INSAT_PROFILE } from '@/lib/insat/default-config';
 import defaultStationMasterList from '@/data/default-station-master.json';
+import {
+  DynamicArchiveCatalog,
+  ArchiveFileInfo,
+  buildDynamicArchiveCatalog,
+} from '@/lib/parser/date-extractor';
 
 // Initialize synchronous in-memory Station Master Map with bundled 1,054 stations
 const initialStationMasterMap = new Map<string, StationMaster>();
@@ -175,6 +180,19 @@ export interface AppStore {
 
   loadDemoFile: () => Promise<void>;
   parseFileBuffer: (buffer: ArrayBuffer, filename: string, size: number) => void;
+
+  archiveCatalog: DynamicArchiveCatalog | null;
+  selectedArchiveDate: string | null;
+  selectedArchiveFileId: string | null;
+  archiveDateRange: { from: string; to: string };
+  isArchiveModalOpen: boolean;
+
+  loadArchiveFolder: (files: File[], folderName?: string) => void;
+  selectArchiveDate: (dateKey: string) => void;
+  setArchiveDateRange: (range: { from: string; to: string }) => void;
+  loadArchiveFile: (fileInfo: ArchiveFileInfo) => Promise<void>;
+  navigateArchiveDate: (direction: 'prev' | 'next') => void;
+  setIsArchiveModalOpen: (open: boolean) => void;
 }
 
 const DEFAULT_CHART_CONFIG: ChartConfig = {
@@ -582,6 +600,95 @@ export const useAppStore = create<AppStore>((set, get) => ({
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to load telemetry dataset';
       set({ error: msg, isLoading: false, parseProgress: '' });
+    }
+  },
+
+  // 13. Dynamic Multi-Year Telemetry Archive implementation
+  archiveCatalog: null,
+  selectedArchiveDate: null,
+  selectedArchiveFileId: null,
+  archiveDateRange: { from: '', to: '' },
+  isArchiveModalOpen: false,
+
+  setIsArchiveModalOpen: (isArchiveModalOpen) => set({ isArchiveModalOpen }),
+  setArchiveDateRange: (archiveDateRange) => set({ archiveDateRange }),
+
+  loadArchiveFolder: (files, folderName = 'Telemetry Archive') => {
+    try {
+      const catalog = buildDynamicArchiveCatalog(files, folderName);
+      const initialDate = catalog.maxDate || catalog.minDate || null;
+      set({
+        archiveCatalog: catalog,
+        selectedArchiveDate: initialDate,
+        selectedArchiveFileId: null,
+        archiveDateRange: {
+          from: catalog.minDate || '',
+          to: catalog.maxDate || '',
+        },
+      });
+
+      // Auto-load first file of latest available date if exists
+      if (initialDate && catalog.dateFileMap[initialDate]?.length > 0) {
+        const firstFile = catalog.dateFileMap[initialDate][0];
+        get().loadArchiveFile(firstFile);
+      }
+    } catch (err) {
+      console.error('Failed to build dynamic archive catalog:', err);
+    }
+  },
+
+  selectArchiveDate: (dateKey) => {
+    const catalog = get().archiveCatalog;
+    if (!catalog) return;
+    set({ selectedArchiveDate: dateKey });
+
+    const filesOnDate = catalog.dateFileMap[dateKey];
+    if (filesOnDate && filesOnDate.length > 0) {
+      get().loadArchiveFile(filesOnDate[0]);
+    }
+  },
+
+  loadArchiveFile: async (fileInfo) => {
+    try {
+      set({
+        isLoading: true,
+        selectedArchiveFileId: fileInfo.id,
+        parseProgress: `Loading ${fileInfo.name}...`,
+      });
+
+      const buffer = await fileInfo.fileRef.arrayBuffer();
+      const decoded = decodeCsdBuffer(buffer);
+      const parsed = parseCsdContent(decoded, fileInfo.name, fileInfo.size, get().stationMasterMap);
+
+      get().setFile(parsed);
+      set({
+        selectedArchiveDate: fileInfo.dateKey,
+        selectedArchiveFileId: fileInfo.id,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : `Failed to parse ${fileInfo.name}`;
+      set({ error: msg, isLoading: false, parseProgress: '' });
+    }
+  },
+
+  navigateArchiveDate: (direction) => {
+    const catalog = get().archiveCatalog;
+    const current = get().selectedArchiveDate;
+    if (!catalog || !catalog.availableDateKeys.length) return;
+
+    const keys = catalog.availableDateKeys;
+    const currentIndex = current ? keys.indexOf(current) : -1;
+    let nextIndex = 0;
+
+    if (direction === 'prev') {
+      nextIndex = currentIndex > 0 ? currentIndex - 1 : keys.length - 1;
+    } else {
+      nextIndex = currentIndex >= 0 && currentIndex < keys.length - 1 ? currentIndex + 1 : 0;
+    }
+
+    const nextDate = keys[nextIndex];
+    if (nextDate) {
+      get().selectArchiveDate(nextDate);
     }
   },
 }));

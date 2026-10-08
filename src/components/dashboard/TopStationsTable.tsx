@@ -89,36 +89,28 @@ export function TopStationsTable() {
         </div>
       </div>
 
-      <div style={{ overflowX: 'auto' }}>
+      <div style={{ overflowX: 'auto', border: '1px solid var(--table-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
         <table
+          className="csd-grid-table"
           style={{
             width: '100%',
-            borderCollapse: 'collapse',
             fontSize: '0.82rem',
             textAlign: 'left',
           }}
         >
           <thead>
-            <tr
-              style={{
-                borderBottom: '1px solid var(--border)',
-                color: 'var(--text-dim)',
-                fontSize: '0.72rem',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-              }}
-            >
-              <th style={{ padding: '10px 12px' }}>Station Name</th>
-              <th style={{ padding: '10px 12px' }}>Station ID</th>
-              <th style={{ padding: '10px 12px' }}>Total Records</th>
-              <th style={{ padding: '10px 12px' }}>Health / Quality</th>
-              <th style={{ padding: '10px 12px' }}>Carrier Status</th>
-              <th style={{ padding: '10px 12px' }}>Active Sensors</th>
-              <th style={{ padding: '10px 12px', textAlign: 'right' }}>Actions</th>
+            <tr>
+              <th className="csd-th" style={{ padding: '10px 12px' }}>Station Name</th>
+              <th className="csd-th" style={{ padding: '10px 12px' }}>Station ID</th>
+              <th className="csd-th" style={{ padding: '10px 12px' }}>Total Records</th>
+              <th className="csd-th" style={{ padding: '10px 12px' }}>Health / Quality</th>
+              <th className="csd-th" style={{ padding: '10px 12px' }}>Carrier Status</th>
+              <th className="csd-th" style={{ padding: '10px 12px' }}>Active Sensors</th>
+              <th className="csd-th" style={{ padding: '10px 12px', textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {top.map((st) => {
+            {top.map((st, idx) => {
               const masterInfo =
                 st.stationMetadata || stationMasterMap.get(st.stationId.trim().toUpperCase());
               const stationName = st.stationName || masterInfo?.stationName || null;
@@ -128,15 +120,10 @@ export function TopStationsTable() {
               return (
                 <tr
                   key={st.stationId}
-                  style={{
-                    borderBottom: '1px solid rgba(148, 163, 184, 0.08)',
-                    transition: 'background 0.12s ease',
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-surface-hover)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  className={`csd-tr ${idx % 2 === 0 ? 'csd-tr-even' : 'csd-tr-odd'}`}
                 >
                   {/* Station Name */}
-                  <td style={{ padding: '10px 12px' }}>
+                  <td className="csd-td" style={{ padding: '10px 12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <Radio size={14} color={isMapped ? 'var(--primary-light)' : 'var(--text-dim)'} />
                       {stationName ? (
@@ -173,7 +160,7 @@ export function TopStationsTable() {
                   </td>
 
                   {/* Station ID */}
-                  <td style={{ padding: '10px 12px' }}>
+                  <td className="csd-td" style={{ padding: '10px 12px' }}>
                     <span
                       className="mono-font"
                       style={{
@@ -191,7 +178,7 @@ export function TopStationsTable() {
                   </td>
 
                   {/* Total Records */}
-                  <td style={{ padding: '10px 12px' }}>
+                  <td className="csd-td" style={{ padding: '10px 12px' }}>
                     <span className="mono-font" style={{ fontWeight: 600 }}>
                       {st.totalRecords}
                     </span>
@@ -201,7 +188,7 @@ export function TopStationsTable() {
                   </td>
 
                   {/* Health / Quality */}
-                  <td style={{ padding: '10px 12px' }}>
+                  <td className="csd-td" style={{ padding: '10px 12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <div
                         style={{
@@ -246,7 +233,7 @@ export function TopStationsTable() {
                   </td>
 
                   {/* Carrier Status */}
-                  <td style={{ padding: '10px 12px' }}>
+                  <td className="csd-td" style={{ padding: '10px 12px' }}>
                     <div style={{ display: 'flex', gap: '4px' }}>
                       {st.lockedCount > 0 && (
                         <span className="badge badge-locked" style={{ fontSize: '0.65rem' }}>
@@ -267,7 +254,7 @@ export function TopStationsTable() {
                   </td>
 
                   {/* Active Sensors */}
-                  <td style={{ padding: '10px 12px' }}>
+                  <td className="csd-td" style={{ padding: '10px 12px' }}>
                     <span
                       style={{
                         fontSize: '0.72rem',
@@ -281,7 +268,7 @@ export function TopStationsTable() {
                   </td>
 
                   {/* Actions */}
-                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                  <td className="csd-td" style={{ padding: '10px 12px', textAlign: 'right' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
                       <button
                         onClick={() => setSelectedStationIdForDetails(st.stationId)}
