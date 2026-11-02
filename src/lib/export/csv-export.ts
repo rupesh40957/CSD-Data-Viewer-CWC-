@@ -33,12 +33,16 @@ export function generateMatrixCsv(model: MatrixReportModel): string {
   const lines: string[] = [];
   const totalCols = model.totalColumns;
 
-  // Row 1: Title (in col 0, followed by commas)
-  // Uses single-line title with dynamic date range so that when opened in Microsoft Excel
-  // (which defaults to 15pt row height for CSV), the entire title and date range is immediately visible
-  // in cell A1 and formula bar without being clipped.
+  // Row 1: Title & Dynamic Period
+  // Populated in Cell 0 (Column A) AND at the start of every station group
+  // so that whether viewing the start or scrolling horizontally through hundreds of stations,
+  // the title and dynamic date range are always immediately visible in CSV without being clipped.
+  const titleText = `Telemetry Data Received at Central Receiving Station during ${model.periodText}`;
   const row1Cells = new Array(totalCols).fill('');
-  row1Cells[0] = escapeCsvCell(`Telemetry Data Received at Central Receiving Station during ${model.periodText}`);
+  row1Cells[0] = escapeCsvCell(titleText);
+  for (const group of model.stationGroups) {
+    row1Cells[group.startColIndex] = escapeCsvCell(titleText);
+  }
   lines.push(row1Cells.join(','));
 
   // Row 2: Station Names

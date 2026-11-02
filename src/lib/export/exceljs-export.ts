@@ -72,19 +72,17 @@ export function createMatrixExcelWorkbook(model: MatrixReportModel): ExcelJS.Wor
   const totalCols = model.totalColumns;
 
   // -------------------------------------------------------------
-  // Row 1: Report Title & Period (Merged A1 to End)
-  // Matches official CWC template: Pure White background, thick top/bottom borders,
-  // Line 1: Bold Black, Line 2: Bold Deep Blue (#002060)
+  // Row 1: Report Title & Period
+  // Matches official CWC template: Pure White background, thick top/bottom borders.
+  // Populated in Cell A1 (frozen column) AND merged across each station group
+  // so that regardless of whether there are 1, 19, or 900+ stations (thousands of columns),
+  // the report title and dynamic period are immediately visible on screen and never lost offscreen.
+  // Line 1: Bold Black, Line 2: Bold Royal Blue (#002060)
   // -------------------------------------------------------------
   const row1 = ws.getRow(1);
   row1.height = 48;
 
-  // Merge A1:End first
-  if (totalCols > 1) {
-    ws.mergeCells(1, 1, 1, totalCols);
-  }
-
-  // Format all merged cells in Row 1 with white fill and thick borders
+  // Format all cells in Row 1 with white fill and thick borders
   for (let c = 1; c <= totalCols; c++) {
     const cell = row1.getCell(c);
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
@@ -96,9 +94,7 @@ export function createMatrixExcelWorkbook(model: MatrixReportModel): ExcelJS.Wor
     };
   }
 
-  // Cell A1 contains richText with 2 lines:
-  // Line 1: Bold Black title
-  // Line 2: Bold Royal Blue date range (#002060)
+  // Cell A1 (in the frozen pane): Displays title & period in the permanently visible column
   const cellA1 = row1.getCell(1);
   cellA1.value = {
     richText: [
@@ -106,7 +102,7 @@ export function createMatrixExcelWorkbook(model: MatrixReportModel): ExcelJS.Wor
         text: 'Telemetry Data Received at Central Receiving Station during\r\n',
         font: {
           name: FONT_FAMILY,
-          size: 14,
+          size: 9.5,
           bold: true,
           color: { argb: 'FF000000' }, // Bold Black
         },
@@ -115,14 +111,52 @@ export function createMatrixExcelWorkbook(model: MatrixReportModel): ExcelJS.Wor
         text: model.periodText,
         font: {
           name: FONT_FAMILY,
-          size: 13,
+          size: 9,
           bold: true,
-          color: { argb: 'FF002060' }, // Bold Royal Blue (matches official template)
+          color: { argb: 'FF002060' }, // Bold Royal Blue
         },
       },
     ],
   };
   cellA1.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+
+  // For each station group: merge Row 1 across that station's columns and display title & period
+  if (model.stationGroups.length > 0) {
+    for (const group of model.stationGroups) {
+      const startCol = group.startColIndex;
+      const endCol = group.startColIndex + group.colSpan - 1;
+      if (endCol > startCol) {
+        ws.mergeCells(1, startCol, 1, endCol);
+      }
+      const masterCell = row1.getCell(startCol);
+      masterCell.value = {
+        richText: [
+          {
+            text: 'Telemetry Data Received at Central Receiving Station during\r\n',
+            font: {
+              name: FONT_FAMILY,
+              size: 13,
+              bold: true,
+              color: { argb: 'FF000000' }, // Bold Black
+            },
+          },
+          {
+            text: model.periodText,
+            font: {
+              name: FONT_FAMILY,
+              size: 12,
+              bold: true,
+              color: { argb: 'FF002060' }, // Bold Royal Blue
+            },
+          },
+        ],
+      };
+      masterCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    }
+  } else if (totalCols > 1) {
+    // Fallback if no station groups
+    ws.mergeCells(1, 1, 1, totalCols);
+  }
 
   // -------------------------------------------------------------
   // Row 2: Station Names & Date Header
