@@ -18,8 +18,12 @@ import {
   AlertTriangle,
   FolderOpen,
   Calendar,
+  TableProperties,
+  ListFilter,
 } from 'lucide-react';
 import { RecordDrawer } from './RecordDrawer';
+import { buildMatrixReportFromRecords } from '@/lib/export/matrix-builder';
+import { MatrixReportModel } from '@/lib/export/types';
 
 export function DataTable() {
   const {
@@ -31,6 +35,7 @@ export function DataTable() {
     searchQuery,
     setSearchQuery,
     selectedStations,
+    dateRange,
     clearStationSelection,
     selectedRecordId,
     setSelectedRecordId,
@@ -55,6 +60,35 @@ export function DataTable() {
   const [highContrastGrid, setHighContrastGrid] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<'excel' | 'csv'>('excel');
+
+  // View Mode: 'matrix' (Data Report) vs 'records' (Log Records)
+  const [viewMode, setViewMode] = useState<'matrix' | 'records'>('matrix');
+  const [matrixPage, setMatrixPage] = useState(1);
+  const [matrixPageSize, setMatrixPageSize] = useState(50);
+
+  const hasActiveFilter = selectedStations.length > 0 || dateRange?.start !== null || dateRange?.end !== null;
+  const matrixModel: MatrixReportModel | null = useMemo(() => {
+    if (!file) return null;
+    if ((file as any).matrixModel && !hasActiveFilter) {
+      return (file as any).matrixModel;
+    }
+    return buildMatrixReportFromRecords(
+      records,
+      insatSensors,
+      insatMSL,
+      selectedStations,
+      dateRange?.start,
+      dateRange?.end
+    );
+  }, [file, records, insatSensors, insatMSL, selectedStations, dateRange, hasActiveFilter]);
+
+  const paginatedTimestamps = useMemo(() => {
+    if (!matrixModel) return [];
+    const start = (matrixPage - 1) * matrixPageSize;
+    return matrixModel.timestamps.slice(start, start + matrixPageSize);
+  }, [matrixModel, matrixPage, matrixPageSize]);
+
+  const totalMatrixPages = matrixModel ? Math.ceil(matrixModel.timestamps.length / matrixPageSize) || 1 : 1;
 
   // Get enabled INSAT sensors for header columns
   const enabledInsatSensors = useMemo(
@@ -184,6 +218,11 @@ export function DataTable() {
     setExportModalOpen(true);
   };
 
+  const handleExportCsv = () => {
+    setExportFormat('csv');
+    setExportModalOpen(true);
+  };
+
   return (
     <div
       style={{
@@ -193,6 +232,91 @@ export function DataTable() {
         width: '100%',
       }}
     >
+      {/* View Switcher: Data Report (CWC Matrix) vs Log Records (Raw Stream) */}
+      <div
+        className="glass-panel"
+        style={{
+          padding: '8px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '10px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            onClick={() => setViewMode('matrix')}
+            className={viewMode === 'matrix' ? 'btn-primary' : 'btn-secondary'}
+            style={{
+              padding: '7px 16px',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '7px',
+              borderRadius: 'var(--radius-md)',
+              background: viewMode === 'matrix' ? 'linear-gradient(135deg, #10b981, #059669)' : undefined,
+              borderColor: viewMode === 'matrix' ? '#10b981' : undefined,
+            }}
+          >
+            <TableProperties size={15} />
+            <span>Data Report (CWC Matrix)</span>
+            <span
+              style={{
+                fontSize: '0.68rem',
+                padding: '2px 7px',
+                borderRadius: '10px',
+                background: viewMode === 'matrix' ? 'rgba(255,255,255,0.25)' : 'var(--bg-subtle)',
+                color: viewMode === 'matrix' ? '#ffffff' : 'var(--text-muted)',
+                fontWeight: 600,
+              }}
+            >
+              {matrixModel ? `${matrixModel.stationGroups.length} Stations` : 'Matrix'}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setViewMode('records')}
+            className={viewMode === 'records' ? 'btn-primary' : 'btn-secondary'}
+            style={{
+              padding: '7px 16px',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '7px',
+              borderRadius: 'var(--radius-md)',
+              background: viewMode === 'records' ? 'linear-gradient(135deg, #0ea5e9, #0284c7)' : undefined,
+              borderColor: viewMode === 'records' ? '#0ea5e9' : undefined,
+            }}
+          >
+            <ListFilter size={15} />
+            <span>Log Records (Telemetry Stream)</span>
+            <span
+              style={{
+                fontSize: '0.68rem',
+                padding: '2px 7px',
+                borderRadius: '10px',
+                background: viewMode === 'records' ? 'rgba(255,255,255,0.25)' : 'var(--bg-subtle)',
+                color: viewMode === 'records' ? '#ffffff' : 'var(--text-muted)',
+                fontWeight: 600,
+              }}
+            >
+              {records.length.toLocaleString()}
+            </span>
+          </button>
+        </div>
+
+        {/* Dynamic Period Information Tag */}
+        {matrixModel && (
+          <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Calendar size={13} color="var(--primary-light)" />
+            <strong style={{ color: 'var(--text-main)' }}>{matrixModel.periodText}</strong>
+          </div>
+        )}
+      </div>
+
       {/* Table Toolbar */}
       <div
         className="glass-panel"
@@ -474,15 +598,257 @@ export function DataTable() {
           <button
             onClick={handleExportExcel}
             className="btn-secondary"
+            title="Download Excel (.xlsx)"
             style={{ padding: '6px 12px', fontSize: '0.78rem' }}
           >
             <Download size={13} color="#10b981" />
-            <span>Excel</span>
+            <span>Excel (.xlsx)</span>
+          </button>
+
+          <button
+            onClick={handleExportCsv}
+            className="btn-secondary"
+            title="Download CSV (.csv)"
+            style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+          >
+            <Download size={13} color="#38bdf8" />
+            <span>CSV (.csv)</span>
           </button>
         </div>
       </div>
 
-      {/* Main Data Table Container Card */}
+      {/* Data Report (CWC Multi-Station Matrix View) */}
+      {viewMode === 'matrix' && matrixModel && (
+        <div className="csd-table-card" style={{ display: 'flex', flexDirection: 'column' }}>
+          {/* CWC Official Report Title Banner */}
+          <div
+            style={{
+              background: '#FFFFFF',
+              color: '#000000',
+              padding: '12px 18px',
+              borderBottom: '2px solid #000000',
+              textAlign: 'center',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+            }}
+          >
+            <div style={{ fontSize: '1.02rem', fontWeight: 800, color: '#000000', letterSpacing: '-0.01em' }}>
+              Telemetry Data Received at Central Receiving Station during
+            </div>
+            <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#002060', marginTop: '2px' }}>
+              {matrixModel.periodText}
+            </div>
+          </div>
+
+          {/* Matrix Scrollable Grid */}
+          <div className="csd-table-scroll-container" style={{ maxHeight: '72vh', overflow: 'auto' }}>
+            <table className={`csd-grid-table ${highContrastGrid ? 'high-contrast' : ''}`} style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+              <thead>
+                {/* Header Row 1: Station Names (Merged) */}
+                <tr style={{ position: 'sticky', top: 0, zIndex: 12 }}>
+                  <th
+                    rowSpan={2}
+                    className="csd-th"
+                    style={{
+                      position: 'sticky',
+                      left: 0,
+                      top: 0,
+                      zIndex: 20,
+                      minWidth: '180px',
+                      background: 'var(--bg-surface)',
+                      textAlign: 'center',
+                      borderRight: '2px solid #64748B',
+                      borderBottom: '1px solid var(--border)',
+                    }}
+                  >
+                    {matrixModel.dateColumnHeader}
+                  </th>
+                  {matrixModel.stationGroups.map((group) => (
+                    <th
+                      key={group.stationId}
+                      colSpan={group.colSpan}
+                      className="csd-th"
+                      style={{
+                        textAlign: 'center',
+                        background: '#1E3A5F',
+                        color: '#ffffff',
+                        fontWeight: 700,
+                        fontSize: '0.82rem',
+                        borderRight: '2px solid #64748B',
+                        borderBottom: '1px solid #334155',
+                        padding: '8px 10px',
+                      }}
+                      title={`Station ID: ${group.stationId} | WIMS Code: ${group.wimsCode || 'N/A'}`}
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                        <span>{group.stationName}</span>
+                        <span style={{ fontSize: '0.66rem', color: '#93c5fd', fontWeight: 500 }}>
+                          ID: {group.stationId}
+                        </span>
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+
+                {/* Header Row 2: Sensor Parameter Names & Units */}
+                <tr style={{ position: 'sticky', top: '44px', zIndex: 11 }}>
+                  {matrixModel.stationGroups.flatMap((group) =>
+                    group.sensors.map((sensor, sIdx) => {
+                      const isLast = sIdx === group.sensors.length - 1;
+                      return (
+                        <th
+                          key={`${group.stationId}-${sensor.name}-${sIdx}`}
+                          className="csd-th"
+                          style={{
+                            textAlign: sensor.name.includes('GPS') || sensor.name.includes('Reporting') ? 'center' : 'right',
+                            minWidth: sensor.name.includes('Reporting') ? '170px' : '95px',
+                            background: 'var(--bg-surface)',
+                            color: 'var(--text-main)',
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            borderRight: isLast ? '2px solid #64748B' : '1px solid var(--border)',
+                            borderBottom: '1px solid var(--border)',
+                            padding: '6px 8px',
+                          }}
+                        >
+                          <div>{sensor.name}</div>
+                          {sensor.unit && (
+                            <div style={{ fontSize: '0.64rem', color: 'var(--text-muted)', fontWeight: 400 }}>
+                              ({sensor.unit})
+                            </div>
+                          )}
+                        </th>
+                      );
+                    })
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedTimestamps.map((ts, rowIdx) => {
+                  const rowVals = matrixModel.grid.get(ts) || [ts];
+                  const isEven = rowIdx % 2 === 0;
+                  return (
+                    <tr
+                      key={ts}
+                      className={`csd-tr ${isEven ? 'csd-tr-even' : 'csd-tr-odd'}`}
+                      style={{ height: '30px' }}
+                    >
+                      {/* Sticky Col 0: Timestamp */}
+                      <td
+                        className="csd-td mono-font"
+                        style={{
+                          position: 'sticky',
+                          left: 0,
+                          zIndex: 8,
+                          background: isEven ? 'var(--bg-surface)' : 'var(--bg-subtle)',
+                          textAlign: 'center',
+                          fontWeight: 600,
+                          fontSize: '0.74rem',
+                          borderRight: '2px solid #64748B',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {ts}
+                      </td>
+
+                      {/* Station Data Cells */}
+                      {matrixModel.stationGroups.flatMap((group) =>
+                        group.sensors.map((sensor, sIdx) => {
+                          const isLast = sIdx === group.sensors.length - 1;
+                          const val = rowVals[sensor.colIndex];
+                          const isNumber = typeof val === 'number';
+                          const isMissing = val === undefined || val === null || val === '---';
+                          const isLock = val === 'Lock';
+                          const isUnlock = val === 'Unlock';
+
+                          return (
+                            <td
+                              key={`${group.stationId}-${sensor.name}-${sIdx}`}
+                              className="csd-td mono-font"
+                              style={{
+                                textAlign: isNumber ? 'right' : 'center',
+                                fontSize: '0.74rem',
+                                fontWeight: isNumber ? 600 : 400,
+                                color: isMissing
+                                  ? 'var(--text-dim)'
+                                  : isNumber
+                                  ? 'var(--text-main)'
+                                  : isLock
+                                  ? '#10b981'
+                                  : isUnlock
+                                  ? '#f59e0b'
+                                  : 'var(--text-main)',
+                                borderRight: isLast ? '2px solid #64748B' : '1px solid var(--border)',
+                                padding: '4px 8px',
+                              }}
+                            >
+                              {isMissing ? (
+                                '---'
+                              ) : isNumber ? (
+                                Number.isInteger(val) ? val : (val as number).toFixed(sensor.resolution ?? 1)
+                              ) : isLock ? (
+                                <span className="badge badge-locked" style={{ fontSize: '0.65rem' }}>Lock</span>
+                              ) : isUnlock ? (
+                                <span className="badge badge-unlocked" style={{ fontSize: '0.65rem' }}>Unlock</span>
+                              ) : (
+                                String(val)
+                              )}
+                            </td>
+                          );
+                        })
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Matrix Pagination Bar */}
+          <div
+            style={{
+              padding: '10px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              borderTop: '1px solid var(--border)',
+              background: 'var(--bg-surface)',
+              borderRadius: '0 0 var(--radius-lg) var(--radius-lg)',
+              fontSize: '0.75rem',
+            }}
+          >
+            <span style={{ color: 'var(--text-muted)' }}>
+              Showing intervals {(matrixPage - 1) * matrixPageSize + 1} to{' '}
+              {Math.min(matrixPage * matrixPageSize, matrixModel.timestamps.length)} of{' '}
+              {matrixModel.timestamps.length} hourly readings across {matrixModel.stationGroups.length} stations
+            </span>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                onClick={() => setMatrixPage((p) => Math.max(1, p - 1))}
+                disabled={matrixPage <= 1}
+                className="btn-secondary"
+                style={{ padding: '4px 8px' }}
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <span>
+                Page {matrixPage} of {totalMatrixPages}
+              </span>
+              <button
+                onClick={() => setMatrixPage((p) => Math.min(totalMatrixPages, p + 1))}
+                disabled={matrixPage >= totalMatrixPages}
+                className="btn-secondary"
+                style={{ padding: '4px 8px' }}
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Log Records (Granular Line-by-Line Frame Stream) */}
+      {viewMode === 'records' && (
       <div className="csd-table-card">
         {/* Scrollable Grid Container */}
         <div className="csd-table-scroll-container">
@@ -943,6 +1309,7 @@ export function DataTable() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Record Details Drawer */}
       <RecordDrawer />

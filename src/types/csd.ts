@@ -156,6 +156,7 @@ export interface CSDFile {
   qualitySummary: DataQualitySummary;
   stats: FileStats; // Retained for backward-compatibility with existing views
   errors: ParseError[];
+  matrixModel?: any; // Retains source or built CWC multi-station matrix report model
 }
 
 /**

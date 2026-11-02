@@ -34,7 +34,10 @@ function runTests() {
   console.log(`${CYAN}   CSD TELEMETRY PARSER AUTOMATED TEST SUITE          ${RESET}`);
   console.log(`${CYAN}======================================================${RESET}\n`);
 
-  const filePath = path.resolve(__dirname, '../20260929.csd');
+  let filePath = path.resolve(__dirname, '../20260929.csd');
+  if (!fs.existsSync(filePath)) {
+    filePath = path.resolve(__dirname, '../public/demo/20260929.csd');
+  }
   if (!fs.existsSync(filePath)) {
     console.error(`${RED}Cannot find test file: ${filePath}${RESET}`);
     process.exit(1);
