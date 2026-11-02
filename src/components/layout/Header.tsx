@@ -96,20 +96,33 @@ export function Header() {
 
       {/* Brand & Dataset Status */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <Link
+          href="/"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            textDecoration: 'none',
+            color: 'inherit',
+          }}
+        >
           <div
             style={{
-              width: '38px',
-              height: '38px',
+              width: '42px',
+              height: '42px',
               borderRadius: '10px',
-              background: 'linear-gradient(135deg, #0284c7, #06b6d4)',
+              background: '#ffffff',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 0 16px rgba(6, 182, 212, 0.4)',
+              boxShadow: '0 2px 10px rgba(0, 0, 0, 0.22), 0 0 14px rgba(228, 11, 11, 0.2)',
+              padding: '4px',
+              flexShrink: 0,
             }}
+            title="CSD — Vision of connectivity"
           >
-            <CsdLogo size={22} color="#ffffff" />
+            <CsdLogo size={24} />
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -117,11 +130,11 @@ export function Header() {
                 CSD Data Viewer
               </span>
             </div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
-              Hydrometeorological & Industrial AWS Telemetry
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', fontWeight: 500 }}>
+              Vision of connectivity • AWS Telemetry
             </div>
           </div>
-        </div>
+        </Link>
 
         {/* Dataset Status Tag */}
         {file ? (
