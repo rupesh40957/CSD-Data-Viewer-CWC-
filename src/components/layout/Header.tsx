@@ -21,6 +21,7 @@ import {
   Radio,
 } from 'lucide-react';
 import { ExportOptionsModal } from '@/components/export/ExportOptionsModal';
+import { CsdLogo } from '@/components/common/CsdLogo';
 
 export function Header() {
   const pathname = usePathname();
@@ -108,7 +109,7 @@ export function Header() {
               boxShadow: '0 0 16px rgba(6, 182, 212, 0.4)',
             }}
           >
-            <Database size={20} color="#ffffff" />
+            <CsdLogo size={22} color="#ffffff" />
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
