@@ -106,31 +106,38 @@ export function Header() {
             color: 'inherit',
           }}
         >
-          <div
+          <CsdLogo
+            variant="emblem"
+            height={36}
             style={{
-              width: '42px',
-              height: '42px',
-              borderRadius: '10px',
-              background: '#ffffff',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 2px 10px rgba(0, 0, 0, 0.22), 0 0 14px rgba(228, 11, 11, 0.2)',
-              padding: '4px',
+              display: 'block',
               flexShrink: 0,
+              filter: theme === 'dark' ? 'drop-shadow(0 0 10px rgba(239, 68, 68, 0.35))' : 'none',
             }}
-            title="CSD — Vision of connectivity"
-          >
-            <CsdLogo size={24} />
-          </div>
+          />
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontWeight: 800, fontSize: '1.08rem', letterSpacing: '-0.02em' }}>
+              <span
+                style={{
+                  fontWeight: 800,
+                  fontSize: '1.14rem',
+                  letterSpacing: '-0.02em',
+                  color: 'var(--text-main)',
+                  lineHeight: 1.2,
+                }}
+              >
                 CSD Data Viewer
               </span>
             </div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', fontWeight: 500 }}>
+            <div
+              style={{
+                fontSize: '0.74rem',
+                color: 'var(--text-dim)',
+                fontWeight: 500,
+                lineHeight: 1.2,
+                marginTop: '2px',
+              }}
+            >
               Vision of connectivity • AWS Telemetry
             </div>
           </div>

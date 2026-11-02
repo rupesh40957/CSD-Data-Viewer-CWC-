@@ -12,7 +12,7 @@ export interface CsdLogoProps {
 }
 
 export function CsdLogo({
-  size = 28,
+  size = 36,
   width,
   height,
   className,
@@ -24,14 +24,7 @@ export function CsdLogo({
   const isFull = variant === 'full';
   const isWhite = color === 'white' || color === '#ffffff' || color === '#fff';
 
-  // Aspect ratios:
-  // Emblem: 731 x 312 ≈ 2.343 : 1
-  // Full logo: 1063 x 405 ≈ 2.625 : 1
-  const aspectRatio = isFull ? 2.625 : 2.343;
-
   const resolvedHeight = height ?? size;
-  const resolvedWidth =
-    width ?? (typeof size === 'number' ? Math.round(size * aspectRatio) : undefined);
 
   let src = '/images/csd-emblem.png';
   if (isFull) {
@@ -44,16 +37,15 @@ export function CsdLogo({
     <img
       src={src}
       alt={alt}
-      width={typeof resolvedWidth === 'number' ? resolvedWidth : undefined}
-      height={typeof resolvedHeight === 'number' ? resolvedHeight : undefined}
       className={className}
       style={{
         display: 'inline-block',
         verticalAlign: 'middle',
         flexShrink: 0,
         objectFit: 'contain',
-        width: typeof resolvedWidth === 'number' ? `${resolvedWidth}px` : resolvedWidth,
         height: typeof resolvedHeight === 'number' ? `${resolvedHeight}px` : resolvedHeight,
+        width: width ? (typeof width === 'number' ? `${width}px` : width) : 'auto',
+        maxWidth: '100%',
         ...style,
       }}
     />
