@@ -43,3 +43,8 @@ next-env.d.ts
 # OS
 Desktop.ini
 ehthumbs.db
+
+# test export artifacts
+public/demo/*_export.xlsx
+public/demo/verified_*.xlsx
+

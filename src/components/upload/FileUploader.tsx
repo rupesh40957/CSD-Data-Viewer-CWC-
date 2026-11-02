@@ -4,6 +4,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/store/use-app-store';
 import { decodeCsdBuffer, parseCsdContent } from '@/lib/parser/csd-parser';
+import { parseCwcMatrixWorkbook } from '@/lib/parser/matrix-excel-parser';
 import { formatCsdTimestamp } from '@/lib/parser/timestamp-parser';
 import { CSDFile } from '@/types/csd';
 import {
@@ -84,9 +85,10 @@ export function FileUploader({ isModal = false, onClose }: FileUploaderProps) {
 
     // Validate file extension
     const ext = f.name.toLowerCase().split('.').pop();
-    if (ext !== 'csd' && ext !== 'txt') {
-      setErrorMessage(`Invalid file format ".${ext}". Please provide a .csd telemetry file.`);
-      setErrorDetails(`Expected file extension: .csd (or .txt with CSD formatting). File received: "${f.name}".`);
+    const validExtensions = ['csd', 'txt', 'xlsx', 'xls', 'csv'];
+    if (!ext || !validExtensions.includes(ext)) {
+      setErrorMessage(`Invalid file format ".${ext}". Please provide a telemetry file (.csd, .xlsx, .csv).`);
+      setErrorDetails(`Supported file formats: .csd, .xlsx, .csv, .txt. File received: "${f.name}".`);
       setImportState('failed');
       return;
     }
@@ -109,13 +111,44 @@ export function FileUploader({ isModal = false, onClose }: FileUploaderProps) {
 
     setImportState('parsing');
     setParsingProgressPct(15);
-    setParsingStep('Reading records from local binary buffer...');
+    setParsingStep('Reading records from local file buffer...');
     setErrorMessage(null);
     setErrorDetails(null);
 
     try {
-      // Step 1: Read file as ArrayBuffer client-side
       const buffer = await selectedFile.arrayBuffer();
+      const ext = selectedFile.name.toLowerCase().split('.').pop();
+
+      // Check if uploaded file is Excel (.xlsx/.xls) or CSV (.csv)
+      if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+        setParsingProgressPct(45);
+        setParsingStep('Analyzing multi-station telemetry matrix structure...');
+        await new Promise((r) => setTimeout(r, 200));
+
+        const result = parseCwcMatrixWorkbook(
+          buffer,
+          selectedFile.name,
+          selectedFile.size,
+          stationMasterMap
+        );
+
+        setParsingProgressPct(85);
+        setParsingStep(
+          `Parsed ${result.matrixModel.stationGroups.length} stations across ${result.matrixModel.totalColumns} parameters...`
+        );
+        await new Promise((r) => setTimeout(r, 200));
+
+        setParsingProgressPct(100);
+        setParsingStep('Finalizing telemetry summary...');
+
+        // Commit to Zustand store
+        setFile(result.file);
+        setParsedSummary(result.file);
+        setImportState('completed');
+        return;
+      }
+
+      // Default: CSD binary protocol
       setParsingProgressPct(45);
       setParsingStep('Parsing data with Windows-1252 0xBB/0xB8 protocol decoder...');
 
@@ -145,7 +178,7 @@ export function FileUploader({ isModal = false, onClose }: FileUploaderProps) {
       setParsedSummary(result);
       setImportState('completed');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'An unexpected error occurred while parsing the .csd file.';
+      const msg = err instanceof Error ? err.message : 'An unexpected error occurred while parsing the telemetry file.';
       const stack = err instanceof Error ? err.stack || err.message : String(err);
       setErrorMessage(msg);
       setErrorDetails(stack);
@@ -207,7 +240,7 @@ export function FileUploader({ isModal = false, onClose }: FileUploaderProps) {
       <input
         type="file"
         ref={fileInputRef}
-        accept=".csd,.txt"
+        accept=".csd,.txt,.xlsx,.xls,.csv"
         style={{ display: 'none' }}
         onChange={(e) => {
           if (e.target.files && e.target.files.length > 0) {
@@ -328,10 +361,10 @@ export function FileUploader({ isModal = false, onClose }: FileUploaderProps) {
               </div>
 
               <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
-                Drop your .csd file here
+                Drop your telemetry file (.csd, .xlsx, .csv)
               </h3>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', maxWidth: '520px', margin: '0 auto 20px' }}>
-                Select or drag a raw hydrometeorological logger telemetry file (.csd).
+                Select or drag a CSD data logger stream or official CWC multi-station Excel/CSV report.
                 Processed entirely in your browser with zero server uploads.
               </p>
 
@@ -346,7 +379,7 @@ export function FileUploader({ isModal = false, onClose }: FileUploaderProps) {
                   style={{ padding: '8px 18px', fontSize: '0.84rem' }}
                 >
                   <FileText size={16} />
-                  <span>Browse .csd File</span>
+                  <span>Browse Telemetry File</span>
                 </button>
 
                 <button

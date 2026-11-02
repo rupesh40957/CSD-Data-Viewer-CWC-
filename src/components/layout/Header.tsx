@@ -220,24 +220,40 @@ export function Header() {
         </button>
 
         {file && (
-          <div style={{ display: 'flex', gap: '6px' }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
             <button
               onClick={handleExportExcel}
               className="btn-secondary"
-              title="Export filtered records to Excel"
-              style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+              title="Download formatted CWC Excel report (.xlsx)"
+              style={{
+                padding: '6px 14px',
+                fontSize: '0.8rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                border: '1px solid rgba(16, 185, 129, 0.35)',
+                background: 'rgba(16, 185, 129, 0.08)',
+              }}
             >
               <Download size={14} color="#10b981" />
-              <span>Excel</span>
+              <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>Excel (.xlsx)</span>
             </button>
             <button
               onClick={handleExportCsv}
               className="btn-secondary"
-              title="Export filtered records to CSV"
-              style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+              title="Download CWC CSV report (.csv)"
+              style={{
+                padding: '6px 14px',
+                fontSize: '0.8rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                border: '1px solid rgba(56, 189, 248, 0.35)',
+                background: 'rgba(56, 189, 248, 0.08)',
+              }}
             >
               <Download size={14} color="#38bdf8" />
-              <span>CSV</span>
+              <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>CSV (.csv)</span>
             </button>
           </div>
         )}

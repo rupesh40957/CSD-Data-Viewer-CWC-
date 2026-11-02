@@ -84,6 +84,7 @@ function applyEquation(
     case 'pressure_formula': {
       // (x / (x + 0.0000001)) * ((x / 10.23) + 925) → Pressure
       if (x === null) return null;
+      if (x === 0) return 0;
       const safeDenom = x + 0.0000001;
       return (x / safeDenom) * (x / 10.23 + 925);
     }
@@ -106,7 +107,11 @@ function applyEquation(
       const x2 = rawValues[1] ?? null;
       if (x1 === null && x2 === null) return null;
       const msl = params?.msl ?? 0;
-      return ((x1 ?? 0) + (x2 ?? 0)) + msl;
+      let dec = 0;
+      if (x2 !== null) {
+        dec = x2 >= 100 ? x2 / 1000 : x2 >= 1 ? x2 / 100 : x2;
+      }
+      return ((x1 ?? 0) + dec) + msl;
     }
 
     default:
@@ -122,7 +127,17 @@ export function computeEngineeringValue(
   record: CSDRecord,
   mslOverride?: number
 ): ComputedEngineeringValue {
-  const rawInputs = config.insatSensorIds.map((key) => getRawValue(record, key));
+  let rawInputs = config.insatSensorIds.map((key) => getRawValue(record, key));
+
+  // If WaterLevel and s08/s09 are null or 0, fallback to record.s16 if present
+  if (
+    config.equationType === 'composite_water_level' &&
+    (rawInputs[0] === null || rawInputs[0] === 0) &&
+    record.s16 !== null &&
+    record.s16 > 0
+  ) {
+    rawInputs = [record.s16, 0];
+  }
   const allNull = rawInputs.every((v) => v === null);
 
   if (allNull) {

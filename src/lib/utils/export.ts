@@ -1,11 +1,31 @@
-import * as XLSX from 'xlsx';
+/**
+ * Central Export Utility for CWC Data Viewer
+ * Orchestrates professional Excel (.xlsx) and CSV (.csv) exports
+ */
+
 import { CsdRecord } from '@/types/csd';
 import { formatCsdTimestamp } from '../parser/timestamp-parser';
 import { InsatSensorConfig } from '../insat/types';
 import { computeRecordEngineeringValues } from '../insat/compute';
+import { MatrixReportModel, ExportReportMode } from '../export/types';
+import { buildMatrixReportFromRecords, formatCwcDateShort } from '../export/matrix-builder';
+export { buildMatrixReportFromRecords, formatCwcDateShort, formatTelemetryTimestamp, resolveCalibratedSensorValue } from '../export/matrix-builder';
+import {
+  createMatrixExcelWorkbook,
+  createFlatExcelWorkbook,
+  downloadExcelWorkbook,
+} from '../export/exceljs-export';
+import {
+  generateMatrixCsv,
+  generateFlattenedMatrixCsv,
+  generateFlatRecordsCsv,
+  downloadCsvWithBom,
+} from '../export/csv-export';
+
+export * from '../export/types';
 
 /**
- * Export section flags — controls which columns appear in the export.
+ * Export section flags — controls which columns appear in flat export.
  */
 export interface ExportSections {
   stationInfo: boolean;    // Line, Station ID, Station Name
@@ -29,8 +49,36 @@ export const DEFAULT_EXPORT_SECTIONS: ExportSections = {
 };
 
 /**
+ * Generate a clean, meaningful filename for telemetry downloads
+ * e.g. "UYD_NEW_DELHI_15-OCT_TO_31-OCT.xlsx"
+ */
+export function generateExportFilename(
+  originalFilename: string,
+  startDate?: Date | null,
+  endDate?: Date | null,
+  ext: 'xlsx' | 'csv' = 'xlsx',
+  suffix?: string
+): string {
+  let base = originalFilename
+    .replace(/\.(csd|xlsx|csv|txt)$/i, '')
+    .trim()
+    .replace(/\s+/g, '_');
+
+  if (startDate && endDate && !base.includes('OCT') && !base.includes('TO')) {
+    const sStr = formatCwcDateShort(startDate).replace(/[\s:]+/g, '_').toUpperCase();
+    const eStr = formatCwcDateShort(endDate).replace(/[\s:]+/g, '_').toUpperCase();
+    base = `${base}_${sStr}_TO_${eStr}`;
+  }
+
+  if (suffix) {
+    base = `${base}_${suffix}`;
+  }
+
+  return `${base}.${ext}`;
+}
+
+/**
  * Convert CSD records to a flat tabular structure suitable for CSV or Excel export.
- * Uses section flags to control which columns are included.
  */
 export function formatRecordsForExport(
   records: CsdRecord[],
@@ -58,16 +106,16 @@ export function formatRecordsForExport(
 
     // Status & Quality
     if (sections.statusQuality) {
-      row['Status'] = r.status;
+      row['Status'] = r.status === 'L' ? 'Locked' : r.status === 'U' ? 'Unlocked' : r.status;
       row['Quality'] = r.quality;
       row['Corrupt Flag'] = r.hasCorruptMarkers ? 'YES' : 'NO';
     }
 
     // Config Values
     if (sections.configValues) {
-      row['c1'] = r.c1;
-      row['c2'] = r.c2;
-      row['c3'] = r.c3;
+      row['c1 (Battery Raw)'] = r.c1;
+      row['c2 (Rainfall Raw)'] = r.c2;
+      row['c3 (RainDaily Raw)'] = r.c3;
       row['H Code'] = r.h;
     }
 
@@ -102,50 +150,70 @@ export function formatRecordsForExport(
 }
 
 /**
- * Export records as Excel (.xlsx) file download
+ * Export records as professional Excel (.xlsx) file download
  */
-export function exportToExcel(
+export async function exportToExcel(
   records: CsdRecord[],
-  filename: string = 'csd_export.xlsx',
+  filename: string = 'telemetry_export.xlsx',
   sections: ExportSections = DEFAULT_EXPORT_SECTIONS,
   insatSensors?: InsatSensorConfig[],
-  insatMSL: number = 0
-) {
-  const data = formatRecordsForExport(records, sections, insatSensors, insatMSL);
-  const worksheet = XLSX.utils.json_to_sheet(data);
+  insatMSL: number = 0,
+  mode: ExportReportMode = 'matrix',
+  existingMatrixModel?: MatrixReportModel | null,
+  dateStart?: Date | null,
+  dateEnd?: Date | null,
+  filterStations?: string[]
+): Promise<void> {
+  let workbook;
 
-  // Auto-size columns
-  const colWidths = Object.keys(data[0] || {}).map((key) => ({
-    wch: Math.max(key.length + 2, 12),
-  }));
-  worksheet['!cols'] = colWidths;
+  if (mode === 'matrix') {
+    // If active station/date filters are present, rebuild matrix dynamically to reflect filtered scope
+    const hasActiveFilters = Boolean((filterStations && filterStations.length > 0) || dateStart || dateEnd);
+    const model =
+      !hasActiveFilters && existingMatrixModel
+        ? existingMatrixModel
+        : buildMatrixReportFromRecords(records, insatSensors, insatMSL, filterStations, dateStart, dateEnd);
+    workbook = createMatrixExcelWorkbook(model);
+  } else {
+    // Flat Mode
+    workbook = createFlatExcelWorkbook(records, sections, insatSensors, insatMSL);
+  }
 
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Data Report');
-  XLSX.writeFile(workbook, filename);
+  await downloadExcelWorkbook(workbook, filename);
 }
 
 /**
- * Export records as CSV file download
+ * Export records as CSV (.csv) file download with UTF-8 BOM
  */
 export function exportToCsv(
   records: CsdRecord[],
-  filename: string = 'csd_export.csv',
+  filename: string = 'telemetry_export.csv',
   sections: ExportSections = DEFAULT_EXPORT_SECTIONS,
   insatSensors?: InsatSensorConfig[],
-  insatMSL: number = 0
-) {
-  const data = formatRecordsForExport(records, sections, insatSensors, insatMSL);
-  const worksheet = XLSX.utils.json_to_sheet(data);
-  const csv = XLSX.utils.sheet_to_csv(worksheet);
+  insatMSL: number = 0,
+  mode: ExportReportMode = 'matrix',
+  flattenedHeaders: boolean = false,
+  existingMatrixModel?: MatrixReportModel | null,
+  dateStart?: Date | null,
+  dateEnd?: Date | null,
+  filterStations?: string[]
+): void {
+  let csvContent = '';
 
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  link.setAttribute('href', url);
-  link.setAttribute('download', filename);
-  link.style.visibility = 'hidden';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  if (mode === 'matrix') {
+    const hasActiveFilters = Boolean((filterStations && filterStations.length > 0) || dateStart || dateEnd);
+    const model =
+      !hasActiveFilters && existingMatrixModel
+        ? existingMatrixModel
+        : buildMatrixReportFromRecords(records, insatSensors, insatMSL, filterStations, dateStart, dateEnd);
+    if (flattenedHeaders) {
+      csvContent = generateFlattenedMatrixCsv(model);
+    } else {
+      csvContent = generateMatrixCsv(model);
+    }
+  } else {
+    csvContent = generateFlatRecordsCsv(records, sections, insatSensors, insatMSL);
+  }
+
+  downloadCsvWithBom(csvContent, filename);
 }
