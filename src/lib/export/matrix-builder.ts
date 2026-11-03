@@ -245,14 +245,18 @@ export function buildMatrixReportFromRecords(
   const timeBuckets = new Map<string, CsdRecord[]>();
 
   if (minDate && maxDate) {
-    const curr = floorToHour(minDate);
-    const end = floorToHour(maxDate);
+    const diffHours = (maxDate.getTime() - minDate.getTime()) / (1000 * 60 * 60);
+    // If range is within 31 days (744 hours), generate continuous hourly timeline
+    if (diffHours <= 744) {
+      const curr = floorToHour(minDate);
+      const end = floorToHour(maxDate);
 
-    while (curr <= end) {
-      const tsStr = formatTelemetryTimestamp(curr);
-      timestamps.push(tsStr);
-      timeBuckets.set(tsStr, []);
-      curr.setUTCHours(curr.getUTCHours() + 1);
+      while (curr <= end) {
+        const tsStr = formatTelemetryTimestamp(curr);
+        timestamps.push(tsStr);
+        timeBuckets.set(tsStr, []);
+        curr.setUTCHours(curr.getUTCHours() + 1);
+      }
     }
   }
 
@@ -276,12 +280,10 @@ export function buildMatrixReportFromRecords(
   // 6. Build 2D Grid
   const grid = new Map<string, (string | number | null)[]>();
 
-  // Map for fast column lookup: stationId + sensorName -> colIndex
-  const colLookup = new Map<string, number>();
+  // Map for fast O(1) station lookup
+  const stationGroupMap = new Map<string, StationColumnGroup>();
   for (const group of stationGroups) {
-    for (const sensor of group.sensors) {
-      colLookup.set(`${group.stationId.toUpperCase()}|${sensor.name.toUpperCase()}`, sensor.colIndex);
-    }
+    stationGroupMap.set(group.stationId.toUpperCase(), group);
   }
 
   for (const ts of timestamps) {
@@ -291,16 +293,15 @@ export function buildMatrixReportFromRecords(
     const bucketRecords = timeBuckets.get(ts) || [];
     for (const r of bucketRecords) {
       const stId = String(r.stationId || (r as any).station_id || 'UNKNOWN').toUpperCase();
+      const group = stationGroupMap.get(stId);
+      if (!group) continue;
+
       const engValues = insatSensors
         ? computeRecordEngineeringValues(insatSensors, r, insatMSL)
         : {};
 
-      for (const group of stationGroups) {
-        if (group.stationId.toUpperCase() !== stId) continue;
-
-        for (const sensor of group.sensors) {
-          rowVals[sensor.colIndex] = resolveCalibratedSensorValue(sensor.name, r, engValues, insatMSL);
-        }
+      for (const sensor of group.sensors) {
+        rowVals[sensor.colIndex] = resolveCalibratedSensorValue(sensor.name, r, engValues, insatMSL);
       }
     }
 

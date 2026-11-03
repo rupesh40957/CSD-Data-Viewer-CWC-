@@ -656,7 +656,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     try {
       set({
         isLoading: true,
-        parseProgress: 'Scanning folder for CSD telemetry archives...',
+        parseProgress: 'Indexing multi-year archive catalog...',
         error: null,
       });
 
@@ -667,42 +667,28 @@ export const useAppStore = create<AppStore>((set, get) => ({
         return;
       }
 
-      // Reset single-day constraints and switch to multi-year archive mode
+      const initialDate = catalog.maxDate || catalog.minDate || null;
+
+      // Switch smoothly to multi-year archive mode with populated date ranges
       set({
         activeMode: 'archive',
         archiveCatalog: catalog,
-        selectedArchiveDate: null,
+        selectedArchiveDate: initialDate,
         selectedArchiveFileId: null,
         archiveDateRange: {
           from: catalog.minDate || '',
           to: catalog.maxDate || '',
         },
         dateRange: { start: null, end: null },
-        parseProgress: `Scanning & aggregating ${catalog.totalFiles} files across ${catalog.availableYears.length} years...`,
-      });
-
-      // Recursively parse and aggregate all CSD files in the archive
-      const { mergedFile, parsedFileMap } = await aggregateArchiveFiles(
-        catalog.files,
-        catalog.folderName,
-        get().stationMasterMap,
-        (current, total, currentName) => {
-          set({
-            parseProgress: `Aggregating archive: ${current} / ${total} files (${currentName})...`,
-          });
-        }
-      );
-
-      set({
-        file: mergedFile,
-        archiveMergedFile: mergedFile,
-        parsedArchiveFileMap: parsedFileMap,
         isLoading: false,
         parseProgress: '',
-        selectedArchiveDate: null, // null represents All Dates (Merged)
-        selectedArchiveFileId: null,
-        tablePage: 1,
       });
+
+      // Instantly load the latest available day to ensure responsive UI
+      if (initialDate && catalog.dateFileMap[initialDate]?.length > 0) {
+        const firstFile = catalog.dateFileMap[initialDate][0];
+        await get().loadArchiveFile(firstFile);
+      }
     } catch (err) {
       console.error('Failed to load multi-year archive folder:', err);
       set({
@@ -713,22 +699,55 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }
   },
 
-  selectArchiveAll: () => {
-    const merged = get().archiveMergedFile;
-    if (merged) {
+  selectArchiveAll: async () => {
+    const catalog = get().archiveCatalog;
+    if (!catalog) return;
+
+    if (get().archiveMergedFile) {
       set({
-        file: merged,
+        file: get().archiveMergedFile,
         selectedArchiveDate: null,
         selectedArchiveFileId: null,
         dateRange: { start: null, end: null },
         tablePage: 1,
       });
-    } else {
+      return;
+    }
+
+    try {
       set({
+        isLoading: true,
+        parseProgress: `Aggregating ${catalog.totalFiles} files across ${catalog.availableYears.length} years...`,
+      });
+
+      // Asynchronously aggregate archive files
+      const { mergedFile, parsedFileMap } = await aggregateArchiveFiles(
+        catalog.files,
+        catalog.folderName,
+        get().stationMasterMap,
+        (current, total, currentName) => {
+          set({
+            parseProgress: `Aggregating ${current} / ${total} files (${currentName})...`,
+          });
+        }
+      );
+
+      set({
+        file: mergedFile,
+        archiveMergedFile: mergedFile,
+        parsedArchiveFileMap: parsedFileMap,
+        isLoading: false,
+        parseProgress: '',
         selectedArchiveDate: null,
         selectedArchiveFileId: null,
-        dateRange: { start: null, end: null },
         tablePage: 1,
+      });
+    } catch (err) {
+      console.error('Failed to aggregate archive files:', err);
+      set({
+        isLoading: false,
+        parseProgress: '',
+        error: err instanceof Error ? err.message : 'Failed to aggregate files',
       });
     }
   },
