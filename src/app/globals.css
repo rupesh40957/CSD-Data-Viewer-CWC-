@@ -513,3 +513,58 @@ body::after {
   border-right: 1px solid rgba(148, 163, 184, 0.38);
   border-bottom: 1px solid rgba(148, 163, 184, 0.38);
 }
+
+
+/* ==========================================================================
+   Print / PDF Export Styles (Official CWC Landscape Layout)
+   ========================================================================== */
+@media print {
+  @page {
+    size: landscape;
+    margin: 8mm;
+  }
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  /* Hide interactive UI chrome */
+  header,
+  nav,
+  aside,
+  .csd-sidebar,
+  .btn-primary,
+  .btn-secondary,
+  .btn-ghost,
+  button,
+  select,
+  input,
+  .text-input,
+  [role="dialog"],
+  .csd-drawer {
+    display: none !important;
+  }
+  .csd-table-card {
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+  }
+  .csd-table-scroll-container {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  table.csd-grid-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+  th.csd-th, td.csd-td {
+    color: #000000 !important;
+    border: 1px solid #94a3b8 !important;
+  }
+  thead {
+    display: table-header-group !important;
+  }
+  tr {
+    page-break-inside: avoid !important;
+  }
+}

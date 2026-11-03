@@ -13,15 +13,20 @@ import {
   Sparkles,
   RefreshCw,
   SlidersHorizontal,
+  FolderArchive,
+  Database,
 } from 'lucide-react';
 
 export function DateArchiveNavigator() {
   const {
+    activeMode,
     archiveCatalog,
+    archiveMergedFile,
     selectedArchiveDate,
     selectedArchiveFileId,
     loadArchiveFolder,
     selectArchiveDate,
+    selectArchiveAll,
     loadArchiveFile,
     navigateArchiveDate,
     setIsArchiveModalOpen,
@@ -43,20 +48,28 @@ export function DateArchiveNavigator() {
     setIsArchiveModalOpen(true);
   };
 
-  // If no archive folder loaded yet, display a sleek quick-loader banner
-  if (!archiveCatalog || archiveCatalog.totalFiles === 0) {
+  // Case 1: Single File Mode or No Archive Folder Loaded
+  if (activeMode === 'single' || !archiveCatalog || archiveCatalog.totalFiles === 0) {
+    const singleDate = file?.stats?.startTime ? new Date(file.stats.startTime) : null;
+    const singleDateKey = singleDate
+      ? `${singleDate.getFullYear()}-${String(singleDate.getMonth() + 1).padStart(2, '0')}-${String(singleDate.getDate()).padStart(2, '0')}`
+      : '';
+    const singleDateDisplay = singleDate
+      ? `${String(singleDate.getDate()).padStart(2, '0')}/${String(singleDate.getMonth() + 1).padStart(2, '0')}/${singleDate.getFullYear()}`
+      : 'Single Day';
+
     return (
       <div
         className="glass-panel"
         style={{
-          padding: '12px 18px',
+          padding: '10px 16px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
           gap: '12px',
-          border: '1px dashed rgba(56, 189, 248, 0.35)',
-          background: 'linear-gradient(135deg, rgba(13, 21, 39, 0.75), rgba(17, 28, 53, 0.6))',
+          border: '1px solid rgba(56, 189, 248, 0.3)',
+          background: 'linear-gradient(135deg, rgba(13, 21, 39, 0.85), rgba(17, 28, 53, 0.75))',
         }}
       >
         <input
@@ -70,60 +83,121 @@ export function DateArchiveNavigator() {
           onChange={handleFolderChange}
         />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {/* Left: Mode Badge & Single File Context */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Active Mode Pill Indicator */}
           <div
             style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
-              background: 'rgba(56, 189, 248, 0.12)',
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              border: '1px solid rgba(56, 189, 248, 0.25)',
+              gap: '6px',
+              padding: '4px 10px',
+              borderRadius: 'var(--radius-full)',
+              background: 'rgba(56, 189, 248, 0.15)',
+              border: '1px solid rgba(56, 189, 248, 0.35)',
+              fontSize: '0.74rem',
+              fontWeight: 700,
+              color: 'var(--primary-light)',
             }}
           >
-            <FolderOpen size={17} color="var(--primary-light)" />
+            <FileText size={13} />
+            <span>Single File Mode</span>
           </div>
-          <div>
-            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-main)' }}>
-              Multi-Year CSD Telemetry Archive
+
+          {file ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span className="mono-font" style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                {file.filename}
+              </span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                ({file.records.length.toLocaleString()} records • {singleDateDisplay})
+              </span>
             </div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-              Load a folder with 1, 2, 5+ years of .csd files to browse by date and switch files dynamically
-            </div>
+          ) : (
+            <span style={{ fontSize: '0.74rem', color: 'var(--text-dim)' }}>
+              No telemetry file loaded
+            </span>
+          )}
+
+          {/* Stepper (Disabled in Single File Mode with informative tooltip) */}
+          <div
+            style={{ display: 'flex', alignItems: 'center', gap: '2px', opacity: 0.5 }}
+            title="Single File Mode: To navigate between multiple dates, choose an Archive Folder containing multi-day .csd files"
+          >
+            <button className="btn-secondary" disabled style={{ padding: '4px 8px', height: '28px', cursor: 'not-allowed' }}>
+              <ChevronLeft size={13} />
+              <span style={{ fontSize: '0.7rem' }}>Prev Day</span>
+            </button>
+            <button className="btn-secondary" disabled style={{ padding: '4px 8px', height: '28px', cursor: 'not-allowed' }}>
+              <span style={{ fontSize: '0.7rem' }}>Next Day</span>
+              <ChevronRight size={13} />
+            </button>
+          </div>
+
+          {/* Date Selector (Displaying Single File Date) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Calendar size={13} color="var(--primary-light)" />
+            <input
+              type="date"
+              value={singleDateKey}
+              readOnly
+              disabled
+              title="Single File Date (Switch to Multi-Year Archive to navigate any date)"
+              className="text-input mono-font"
+              style={{
+                padding: '3px 8px',
+                fontSize: '0.74rem',
+                fontWeight: 600,
+                height: '28px',
+                width: '130px',
+                opacity: 0.8,
+                cursor: 'default',
+              }}
+            />
           </div>
         </div>
 
-        <button
-          onClick={() => folderInputRef.current?.click()}
-          className="btn-primary"
-          style={{ padding: '7px 14px', fontSize: '0.78rem' }}
-        >
-          <FolderOpen size={14} />
-          <span>Choose Archive Folder</span>
-        </button>
+        {/* Right: Prominent Multi-Year Archive Chooser Button */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            onClick={() => folderInputRef.current?.click()}
+            className="btn-primary"
+            style={{
+              padding: '6px 14px',
+              fontSize: '0.78rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '7px',
+              boxShadow: '0 2px 10px rgba(2, 132, 199, 0.35)',
+            }}
+            title="Select a folder containing 1 or multiple years of CSD telemetry files"
+          >
+            <FolderOpen size={14} />
+            <span>Choose CSD Archive Folder</span>
+          </button>
+        </div>
       </div>
     );
   }
 
-  // Active files on currently selected date
+  // Case 2: Multi-Year Archive Mode
   const filesOnSelectedDate = selectedArchiveDate
     ? archiveCatalog.dateFileMap[selectedArchiveDate] || []
     : [];
 
   const activeFileInfo = filesOnSelectedDate.find((f) => f.id === selectedArchiveFileId) || filesOnSelectedDate[0];
-
-  // Selected date components
-  const currentYear = selectedArchiveDate ? parseInt(selectedArchiveDate.split('-')[0], 10) : archiveCatalog.availableYears[0];
+  const currentYear = selectedArchiveDate
+    ? parseInt(selectedArchiveDate.split('-')[0], 10)
+    : archiveCatalog.availableYears[archiveCatalog.availableYears.length - 1] || archiveCatalog.availableYears[0];
 
   const handleYearChange = (yr: number) => {
-    // Find earliest or latest date matching this year
     const matchingDates = archiveCatalog.availableDateKeys.filter((k) => k.startsWith(`${yr}-`));
     if (matchingDates.length > 0) {
-      selectArchiveDate(matchingDates[0]);
+      selectArchiveDate(matchingDates[matchingDates.length - 1]);
     }
   };
+
+  const isViewingAll = selectedArchiveDate === null;
 
   return (
     <div
@@ -135,7 +209,7 @@ export function DateArchiveNavigator() {
         justifyContent: 'space-between',
         flexWrap: 'wrap',
         gap: '12px',
-        border: '1px solid var(--border-focus)',
+        border: '1px solid rgba(16, 185, 129, 0.35)',
         background: 'linear-gradient(135deg, rgba(13, 21, 39, 0.85), rgba(17, 28, 53, 0.75))',
       }}
     >
@@ -150,8 +224,29 @@ export function DateArchiveNavigator() {
         onChange={handleFolderChange}
       />
 
-      {/* Left: Folder Context & Year Selector */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+      {/* Left: Mode Badge, Folder Context & Steppers */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        {/* Active Mode Pill Indicator */}
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '4px 10px',
+            borderRadius: 'var(--radius-full)',
+            background: 'rgba(16, 185, 129, 0.15)',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
+            fontSize: '0.74rem',
+            fontWeight: 700,
+            color: 'var(--quality-good)',
+          }}
+          title={`Multi-Year Archive Mode: ${archiveCatalog.totalFiles} files across ${archiveCatalog.availableYears.length} years (${archiveCatalog.availableYears.join(', ')})`}
+        >
+          <FolderArchive size={13} />
+          <span>Multi-Year Archive Mode</span>
+        </div>
+
+        {/* Change Folder Button */}
         <button
           onClick={() => folderInputRef.current?.click()}
           className="btn-secondary"
@@ -161,7 +256,7 @@ export function DateArchiveNavigator() {
           <FolderOpen size={13} color="var(--primary-light)" />
           <span style={{ fontWeight: 600 }}>{archiveCatalog.folderName}</span>
           <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-            ({archiveCatalog.totalFiles} files)
+            ({archiveCatalog.totalFiles} files • {archiveCatalog.availableYears.length} Yrs)
           </span>
         </button>
 
@@ -174,8 +269,8 @@ export function DateArchiveNavigator() {
               onChange={(e) => handleYearChange(Number(e.target.value))}
               className="text-input"
               style={{
-                padding: '4px 8px',
-                fontSize: '0.75rem',
+                padding: '3px 8px',
+                fontSize: '0.74rem',
                 fontWeight: 700,
                 cursor: 'pointer',
                 color: 'var(--primary-light)',
@@ -239,12 +334,32 @@ export function DateArchiveNavigator() {
             }}
           />
         </div>
+
+        {/* View All (Merged) Toggle Button */}
+        <button
+          onClick={selectArchiveAll}
+          className={isViewingAll ? 'btn-primary' : 'btn-secondary'}
+          style={{
+            padding: '4px 10px',
+            fontSize: '0.72rem',
+            height: '30px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            background: isViewingAll ? 'linear-gradient(135deg, #10b981, #059669)' : undefined,
+            borderColor: isViewingAll ? '#10b981' : undefined,
+          }}
+          title="View all records merged across all dates in this multi-year archive"
+        >
+          <Layers size={13} />
+          <span>{isViewingAll ? 'All Dates Merged' : 'View All Dates'}</span>
+        </button>
       </div>
 
       {/* Right: Available Files on Date & Explorer Modal Launcher */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
         {/* Available Files on Date dropdown */}
-        {filesOnSelectedDate.length > 0 ? (
+        {selectedArchiveDate && filesOnSelectedDate.length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', fontWeight: 600 }}>
               FILES ({filesOnSelectedDate.length}):
@@ -275,10 +390,6 @@ export function DateArchiveNavigator() {
               ))}
             </select>
           </div>
-        ) : (
-          <span style={{ fontSize: '0.74rem', color: 'var(--quality-corrupt)', fontWeight: 500 }}>
-            No .csd files found on this date
-          </span>
         )}
 
         {/* Full Archive Calendar / Explorer Modal Button */}

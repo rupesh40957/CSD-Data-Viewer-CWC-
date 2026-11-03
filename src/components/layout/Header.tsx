@@ -12,12 +12,14 @@ import {
   Sun,
   Moon,
   Upload,
+  Printer,
   Download,
   Database,
   CheckCircle,
-  AlertTriangle,
   Settings,
   FolderOpen,
+  FolderArchive,
+  FileText,
   Radio,
 } from 'lucide-react';
 import { ExportOptionsModal } from '@/components/export/ExportOptionsModal';
@@ -27,6 +29,8 @@ export function Header() {
   const pathname = usePathname();
   const {
     file,
+    activeMode,
+    archiveCatalog,
     theme,
     toggleTheme,
     parseFileBuffer,
@@ -36,7 +40,7 @@ export function Header() {
   } = useAppStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [exportModalOpen, setExportModalOpen] = useState(false);
-  const [exportFormat, setExportFormat] = useState<'excel' | 'csv'>('excel');
+  const [exportFormat, setExportFormat] = useState<'excel' | 'csv' | 'pdf'>('excel');
 
   const navItems = [
     { label: 'Overview', href: '/', icon: Activity },
@@ -52,6 +56,11 @@ export function Header() {
 
   const handleExportCsv = () => {
     setExportFormat('csv');
+    setExportModalOpen(true);
+  };
+
+  const handleExportPdf = () => {
+    setExportFormat('pdf');
     setExportModalOpen(true);
   };
 
@@ -143,49 +152,56 @@ export function Header() {
           </div>
         </Link>
 
-        {/* Dataset Status Tag */}
-        {file ? (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '4px 12px',
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-full)',
-              fontSize: '0.78rem',
-            }}
-          >
-            <span className="live-indicator" />
-            <span className="mono-font" style={{ fontWeight: 600, color: 'var(--text-main)' }}>
-              {file.filename}
-            </span>
-            <span style={{ color: 'var(--text-dim)' }}>•</span>
-            <span style={{ color: 'var(--text-muted)' }}>
-              {file.records.length.toLocaleString()} records
-            </span>
-            <span style={{ color: 'var(--text-dim)' }}>•</span>
-            <span style={{ color: 'var(--primary-light)' }}>
-              {file.stats.uniqueStations} stations
-            </span>
-            <span style={{ color: 'var(--text-dim)' }}>•</span>
-            <span style={{ color: 'var(--quality-good)', fontWeight: 600 }}>
-              {((file.stats.goodRecords / file.stats.totalRecords) * 100).toFixed(1)}% Valid
-            </span>
-          </div>
-        ) : (
+        {file && (
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              fontSize: '0.78rem',
-              color: 'var(--text-dim)',
+              padding: '4px 12px',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-full)',
+              fontSize: '0.74rem',
             }}
           >
-            <AlertTriangle size={14} color="#f59e0b" />
-            <span>No telemetry file loaded</span>
+            {activeMode === 'archive' && archiveCatalog ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  color: 'var(--quality-good)',
+                  fontWeight: 600,
+                }}
+                title={`Multi-Year Archive Mode: ${archiveCatalog.totalFiles} files across ${archiveCatalog.availableYears.length} years (${archiveCatalog.availableYears.join(', ')})`}
+              >
+                <FolderArchive size={13} color="var(--quality-good)" />
+                <span>Multi-Year Archive Mode</span>
+                <span style={{ color: 'var(--text-dim)' }}>•</span>
+                <span className="mono-font" style={{ color: 'var(--text-main)' }}>
+                  {archiveCatalog.totalFiles} files ({archiveCatalog.availableYears.length} Yrs)
+                </span>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  color: 'var(--primary-light)',
+                  fontWeight: 600,
+                }}
+                title={`Single File Mode: ${file.filename}`}
+              >
+                <FileText size={13} color="var(--primary-light)" />
+                <span>Single File Mode</span>
+                <span style={{ color: 'var(--text-dim)' }}>•</span>
+                <span className="mono-font" style={{ color: 'var(--text-main)' }}>
+                  {file.filename}
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -275,6 +291,23 @@ export function Header() {
             >
               <Download size={14} color="#38bdf8" />
               <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>CSV (.csv)</span>
+            </button>
+            <button
+              onClick={handleExportPdf}
+              className="btn-secondary"
+              title="Print / Save CWC report as PDF (.pdf)"
+              style={{
+                padding: '6px 14px',
+                fontSize: '0.8rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                border: '1px solid rgba(239, 68, 68, 0.35)',
+                background: 'rgba(239, 68, 68, 0.08)',
+              }}
+            >
+              <Printer size={14} color="#ef4444" />
+              <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>PDF (.pdf)</span>
             </button>
           </div>
         )}

@@ -21,6 +21,10 @@ import {
   generateFlatRecordsCsv,
   downloadCsvWithBom,
 } from '../export/csv-export';
+import {
+  exportMatrixToPdf,
+} from '../export/pdf-export';
+export { exportMatrixToPdf } from '../export/pdf-export';
 
 export * from '../export/types';
 
@@ -216,4 +220,25 @@ export function exportToCsv(
   }
 
   downloadCsvWithBom(csvContent, filename);
+}
+
+
+/**
+ * Export records as printable landscape CWC report / PDF
+ */
+export function exportToPdf(
+  records: CsdRecord[],
+  insatSensors?: InsatSensorConfig[],
+  insatMSL: number = 0,
+  existingMatrixModel?: MatrixReportModel | null,
+  dateStart?: Date | null,
+  dateEnd?: Date | null,
+  filterStations?: string[]
+): void {
+  const hasActiveFilters = Boolean((filterStations && filterStations.length > 0) || dateStart || dateEnd);
+  const model =
+    !hasActiveFilters && existingMatrixModel
+      ? existingMatrixModel
+      : buildMatrixReportFromRecords(records, insatSensors, insatMSL, filterStations, dateStart, dateEnd);
+  exportMatrixToPdf(model);
 }

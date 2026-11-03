@@ -7,6 +7,7 @@ import {
   DEFAULT_EXPORT_SECTIONS,
   exportToExcel,
   exportToCsv,
+  exportToPdf,
   generateExportFilename,
   ExportReportMode,
   formatCwcDateShort,
@@ -21,6 +22,7 @@ import {
   Clock,
   ShieldCheck,
   Sliders,
+  Printer,
   Zap,
   Radio,
   Antenna,
@@ -34,7 +36,7 @@ import {
 interface ExportOptionsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  format: 'excel' | 'csv';
+  format: 'excel' | 'csv' | 'pdf';
 }
 
 const SECTION_INFO: {
@@ -99,7 +101,7 @@ export function ExportOptionsModal({ isOpen, onClose, format: initialFormat }: E
   const { file, insatSensors, insatMSL, selectedStations, dateRange } = useAppStore();
   const records = useAppStore(selectFilteredRecords);
 
-  const [activeFormat, setActiveFormat] = useState<'excel' | 'csv'>(initialFormat);
+  const [activeFormat, setActiveFormat] = useState<'excel' | 'csv' | 'pdf'>(initialFormat);
   const [reportMode, setReportMode] = useState<ExportReportMode>('matrix');
   const [flattenedCsv, setFlattenedCsv] = useState(false);
   const [sections, setSections] = useState<ExportSections>({ ...DEFAULT_EXPORT_SECTIONS });
@@ -193,6 +195,24 @@ export function ExportOptionsModal({ isOpen, onClose, format: initialFormat }: E
       // Pass existing matrix model only if no active station or date filters are applied
       const existingMatrix = !hasActiveFilter ? ((file as any).matrixModel || null) : null;
 
+      if (activeFormat === 'pdf') {
+        exportToPdf(
+          records,
+          insatSensors,
+          insatMSL,
+          existingMatrix,
+          effectiveStartDate,
+          effectiveEndDate,
+          selectedStations
+        );
+        setExportSuccessMsg('Opening print / PDF dialog...');
+        setTimeout(() => {
+          setIsExporting(false);
+          onClose();
+        }, 1200);
+        return;
+      }
+
       if (activeFormat === 'excel') {
         await exportToExcel(
           records,
@@ -277,7 +297,9 @@ export function ExportOptionsModal({ isOpen, onClose, format: initialFormat }: E
             background:
               activeFormat === 'excel'
                 ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(34, 197, 94, 0.05))'
-                : 'linear-gradient(135deg, rgba(56, 189, 248, 0.12), rgba(14, 165, 233, 0.05))',
+                : activeFormat === 'csv'
+                ? 'linear-gradient(135deg, rgba(56, 189, 248, 0.12), rgba(14, 165, 233, 0.05))'
+                : 'linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(244, 63, 94, 0.05))',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -367,6 +389,20 @@ export function ExportOptionsModal({ isOpen, onClose, format: initialFormat }: E
             >
               <FileText size={14} />
               <span>CSV (.csv)</span>
+            </button>
+            <button
+              onClick={() => setActiveFormat('pdf')}
+              className={activeFormat === 'pdf' ? 'btn-primary' : 'btn-secondary'}
+              style={{
+                padding: '6px 14px',
+                fontSize: '0.78rem',
+                borderRadius: '6px',
+                background: activeFormat === 'pdf' ? '#ef4444' : undefined,
+                borderColor: activeFormat === 'pdf' ? '#ef4444' : undefined,
+              }}
+            >
+              <Printer size={14} />
+              <span>PDF (.pdf)</span>
             </button>
           </div>
 
@@ -806,15 +842,22 @@ export function ExportOptionsModal({ isOpen, onClose, format: initialFormat }: E
             style={{
               padding: '8px 20px',
               fontSize: '0.82rem',
-              background: activeFormat === 'excel' ? '#10b981' : '#0ea5e9',
-              borderColor: activeFormat === 'excel' ? '#10b981' : '#0ea5e9',
+              background: activeFormat === 'excel' ? '#10b981' : activeFormat === 'csv' ? '#0ea5e9' : '#ef4444',
+              borderColor: activeFormat === 'excel' ? '#10b981' : activeFormat === 'csv' ? '#0ea5e9' : '#ef4444',
               opacity: isExporting || (reportMode === 'flat' && enabledCount === 0) ? 0.6 : 1,
             }}
           >
             {isExporting ? (
               <>
                 <Loader2 size={15} className="animate-spin" />
-                <span>Generating {activeFormat.toUpperCase()}...</span>
+                <span>{activeFormat === 'pdf' ? 'Preparing PDF...' : `Generating ${activeFormat.toUpperCase()}...`}</span>
+              </>
+            ) : activeFormat === 'pdf' ? (
+              <>
+                <Printer size={15} />
+                <span>
+                  Print / Save as PDF ({reportMode === 'matrix' ? 'Matrix' : `${records.length.toLocaleString()} Records`})
+                </span>
               </>
             ) : (
               <>

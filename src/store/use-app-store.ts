@@ -28,6 +28,11 @@ import {
   ArchiveFileInfo,
   buildDynamicArchiveCatalog,
 } from '@/lib/parser/date-extractor';
+import {
+  aggregateArchiveFiles,
+  computeArchiveSpanSummary,
+  mergeParsedCsdFiles,
+} from '@/lib/parser/archive-aggregator';
 
 // Initialize synchronous in-memory Station Master Map with bundled 1,054 stations
 const initialStationMasterMap = new Map<string, StationMaster>();
@@ -40,6 +45,9 @@ const initialStationMasterMap = new Map<string, StationMaster>();
 export interface AppStore {
   // 1. File state & parsing telemetry
   file: CSDFile | null;
+  activeMode: 'single' | 'archive';
+  archiveMergedFile: CSDFile | null;
+  parsedArchiveFileMap: Map<string, CSDFile>;
   isLoading: boolean;
   parseProgress: string;
   parseErrors: ParseError[];
@@ -106,7 +114,8 @@ export interface AppStore {
   isInsatConfigOpen: boolean;
 
   // Actions
-  setFile: (file: CSDFile) => void;
+  setFile: (file: CSDFile, mode?: 'single' | 'archive') => void;
+  selectArchiveAll: () => void;
   setIsLoading: (loading: boolean, progress?: string) => void;
   setError: (err: string | null) => void;
   clearFile: () => void;
@@ -207,6 +216,9 @@ const DEFAULT_CHART_CONFIG: ChartConfig = {
 
 export const useAppStore = create<AppStore>((set, get) => ({
   file: null,
+  activeMode: 'single',
+  archiveMergedFile: null,
+  parsedArchiveFileMap: new Map(),
   isLoading: false,
   parseProgress: '',
   parseErrors: [],
@@ -355,9 +367,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   setIsUnmappedModalOpen: (isUnmappedModalOpen) => set({ isUnmappedModalOpen }),
 
-  setFile: (file) =>
+  setFile: (file, mode) => {
+    const isSingle = mode === 'single' || (!mode && get().activeMode === 'single');
     set({
       file,
+      activeMode: isSingle ? 'single' : 'archive',
+      archiveCatalog: isSingle ? null : get().archiveCatalog,
+      archiveMergedFile: isSingle ? null : get().archiveMergedFile,
+      selectedArchiveDate: isSingle ? null : get().selectedArchiveDate,
+      selectedArchiveFileId: isSingle ? null : get().selectedArchiveFileId,
+      archiveDateRange: isSingle ? { from: '', to: '' } : get().archiveDateRange,
       isLoading: false,
       parseProgress: '',
       parseErrors: file.errors,
@@ -369,7 +388,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         ...DEFAULT_CHART_CONFIG,
         selectedSensors: ['s16'],
       },
-    }),
+    });
+  },
 
   setIsLoading: (loading, progress = '') =>
     set({ isLoading: loading, parseProgress: progress }),
@@ -379,10 +399,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
   clearFile: () =>
     set({
       file: null,
+      activeMode: 'single',
+      archiveCatalog: null,
+      archiveMergedFile: null,
+      parsedArchiveFileMap: new Map(),
+      selectedArchiveDate: null,
+      selectedArchiveFileId: null,
+      archiveDateRange: { from: '', to: '' },
       selectedStations: [],
       selectedRecordId: null,
       parseErrors: [],
       error: null,
+      dateRange: { start: null, end: null },
       tablePage: 1,
     }),
 
@@ -578,11 +606,22 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   parseFileBuffer: (buffer: ArrayBuffer, filename: string, size: number) => {
     try {
-      set({ isLoading: true, parseProgress: 'Decoding Windows-1252 binary stream...' });
+      set({
+        isLoading: true,
+        parseProgress: 'Decoding Windows-1252 binary stream...',
+        activeMode: 'single',
+        archiveCatalog: null,
+        archiveMergedFile: null,
+        parsedArchiveFileMap: new Map(),
+        selectedArchiveDate: null,
+        selectedArchiveFileId: null,
+        archiveDateRange: { from: '', to: '' },
+        dateRange: { start: null, end: null },
+      });
       const decoded = decodeCsdBuffer(buffer);
       set({ parseProgress: 'Parsing 21-field records & sensor telemetry...' });
       const parsed = parseCsdContent(decoded, filename, size, get().stationMasterMap);
-      get().setFile(parsed);
+      get().setFile(parsed, 'single');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to parse .csd file';
       set({ error: msg, isLoading: false, parseProgress: '' });
@@ -615,40 +654,93 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   loadArchiveFolder: async (files, folderName = 'Telemetry Archive') => {
     try {
+      set({
+        isLoading: true,
+        parseProgress: 'Scanning folder for CSD telemetry archives...',
+        error: null,
+      });
+
       const catalog = buildDynamicArchiveCatalog(files, folderName);
       if (catalog.totalFiles === 0) {
+        set({ isLoading: false, parseProgress: '' });
         alert('No .csd or .txt telemetry files found in the chosen folder.');
         return;
       }
-      const initialDate = catalog.maxDate || catalog.minDate || null;
+
+      // Reset single-day constraints and switch to multi-year archive mode
       set({
+        activeMode: 'archive',
         archiveCatalog: catalog,
-        selectedArchiveDate: initialDate,
+        selectedArchiveDate: null,
         selectedArchiveFileId: null,
         archiveDateRange: {
           from: catalog.minDate || '',
           to: catalog.maxDate || '',
         },
+        dateRange: { start: null, end: null },
+        parseProgress: `Scanning & aggregating ${catalog.totalFiles} files across ${catalog.availableYears.length} years...`,
       });
 
-      // Auto-load first file of latest available date if exists
-      if (initialDate && catalog.dateFileMap[initialDate]?.length > 0) {
-        const firstFile = catalog.dateFileMap[initialDate][0];
-        await get().loadArchiveFile(firstFile);
-      }
+      // Recursively parse and aggregate all CSD files in the archive
+      const { mergedFile, parsedFileMap } = await aggregateArchiveFiles(
+        catalog.files,
+        catalog.folderName,
+        get().stationMasterMap,
+        (current, total, currentName) => {
+          set({
+            parseProgress: `Aggregating archive: ${current} / ${total} files (${currentName})...`,
+          });
+        }
+      );
+
+      set({
+        file: mergedFile,
+        archiveMergedFile: mergedFile,
+        parsedArchiveFileMap: parsedFileMap,
+        isLoading: false,
+        parseProgress: '',
+        selectedArchiveDate: null, // null represents All Dates (Merged)
+        selectedArchiveFileId: null,
+        tablePage: 1,
+      });
     } catch (err) {
-      console.error('Failed to build dynamic archive catalog:', err);
+      console.error('Failed to load multi-year archive folder:', err);
+      set({
+        isLoading: false,
+        parseProgress: '',
+        error: err instanceof Error ? err.message : 'Failed to load archive folder',
+      });
     }
   },
 
-  selectArchiveDate: (dateKey) => {
+  selectArchiveAll: () => {
+    const merged = get().archiveMergedFile;
+    if (merged) {
+      set({
+        file: merged,
+        selectedArchiveDate: null,
+        selectedArchiveFileId: null,
+        dateRange: { start: null, end: null },
+        tablePage: 1,
+      });
+    } else {
+      set({
+        selectedArchiveDate: null,
+        selectedArchiveFileId: null,
+        dateRange: { start: null, end: null },
+        tablePage: 1,
+      });
+    }
+  },
+
+  selectArchiveDate: async (dateKey) => {
     const catalog = get().archiveCatalog;
     if (!catalog) return;
-    set({ selectedArchiveDate: dateKey });
+    set({ selectedArchiveDate: dateKey, tablePage: 1 });
 
     const filesOnDate = catalog.dateFileMap[dateKey];
     if (filesOnDate && filesOnDate.length > 0) {
-      get().loadArchiveFile(filesOnDate[0]);
+      await get().loadArchiveFile(filesOnDate[0]);
     }
   },
 
@@ -657,8 +749,25 @@ export const useAppStore = create<AppStore>((set, get) => ({
       set({
         isLoading: true,
         selectedArchiveFileId: fileInfo.id,
+        selectedArchiveDate: fileInfo.dateKey,
         parseProgress: `Loading ${fileInfo.name}...`,
       });
+
+      // Check cache first
+      const cached = get().parsedArchiveFileMap?.get(fileInfo.id);
+      if (cached) {
+        set({
+          file: cached,
+          activeMode: 'archive',
+          isLoading: false,
+          parseProgress: '',
+          selectedArchiveDate: fileInfo.dateKey,
+          selectedArchiveFileId: fileInfo.id,
+          dateRange: { start: null, end: null },
+          tablePage: 1,
+        });
+        return;
+      }
 
       let buffer: ArrayBuffer;
       if (typeof fileInfo.fileRef.arrayBuffer === 'function') {
@@ -684,10 +793,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const decoded = decodeCsdBuffer(buffer);
       const parsed = parseCsdContent(decoded, fileInfo.name, fileInfo.size, get().stationMasterMap);
 
-      get().setFile(parsed);
+      // Save in cache
+      get().parsedArchiveFileMap?.set(fileInfo.id, parsed);
+
       set({
+        file: parsed,
+        activeMode: 'archive',
+        isLoading: false,
+        parseProgress: '',
         selectedArchiveDate: fileInfo.dateKey,
         selectedArchiveFileId: fileInfo.id,
+        dateRange: { start: null, end: null },
+        tablePage: 1,
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : `Failed to parse ${fileInfo.name}`;

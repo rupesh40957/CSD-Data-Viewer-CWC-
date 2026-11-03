@@ -82,6 +82,11 @@ export function createMatrixExcelWorkbook(model: MatrixReportModel): ExcelJS.Wor
   const row1 = ws.getRow(1);
   row1.height = 48;
 
+  // Merge Row 1 across the entire report width (A1 to totalCols)
+  if (totalCols > 1) {
+    ws.mergeCells(1, 1, 1, totalCols);
+  }
+
   // Format all cells in Row 1 with white fill and thick borders
   for (let c = 1; c <= totalCols; c++) {
     const cell = row1.getCell(c);
@@ -94,7 +99,7 @@ export function createMatrixExcelWorkbook(model: MatrixReportModel): ExcelJS.Wor
     };
   }
 
-  // Cell A1 (in the frozen pane): Displays title & period in the permanently visible column
+  // Master cell A1: Displays title & dynamic period across the entire sheet
   const cellA1 = row1.getCell(1);
   cellA1.value = {
     richText: [
@@ -102,7 +107,7 @@ export function createMatrixExcelWorkbook(model: MatrixReportModel): ExcelJS.Wor
         text: 'Telemetry Data Received at Central Receiving Station during\r\n',
         font: {
           name: FONT_FAMILY,
-          size: 9.5,
+          size: 14,
           bold: true,
           color: { argb: 'FF000000' }, // Bold Black
         },
@@ -111,52 +116,14 @@ export function createMatrixExcelWorkbook(model: MatrixReportModel): ExcelJS.Wor
         text: model.periodText,
         font: {
           name: FONT_FAMILY,
-          size: 9,
+          size: 13,
           bold: true,
-          color: { argb: 'FF002060' }, // Bold Royal Blue
+          color: { argb: 'FF002060' }, // Bold Royal Blue (matches official template)
         },
       },
     ],
   };
   cellA1.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-
-  // For each station group: merge Row 1 across that station's columns and display title & period
-  if (model.stationGroups.length > 0) {
-    for (const group of model.stationGroups) {
-      const startCol = group.startColIndex;
-      const endCol = group.startColIndex + group.colSpan - 1;
-      if (endCol > startCol) {
-        ws.mergeCells(1, startCol, 1, endCol);
-      }
-      const masterCell = row1.getCell(startCol);
-      masterCell.value = {
-        richText: [
-          {
-            text: 'Telemetry Data Received at Central Receiving Station during\r\n',
-            font: {
-              name: FONT_FAMILY,
-              size: 13,
-              bold: true,
-              color: { argb: 'FF000000' }, // Bold Black
-            },
-          },
-          {
-            text: model.periodText,
-            font: {
-              name: FONT_FAMILY,
-              size: 12,
-              bold: true,
-              color: { argb: 'FF002060' }, // Bold Royal Blue
-            },
-          },
-        ],
-      };
-      masterCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    }
-  } else if (totalCols > 1) {
-    // Fallback if no station groups
-    ws.mergeCells(1, 1, 1, totalCols);
-  }
 
   // -------------------------------------------------------------
   // Row 2: Station Names & Date Header

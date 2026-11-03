@@ -20,6 +20,8 @@ export function SidebarArchiveFiles() {
   const router = useRouter();
   const {
     archiveCatalog,
+    selectedArchiveDate,
+    selectArchiveAll,
     archiveDateRange,
     setArchiveDateRange,
     selectedArchiveFileId,
@@ -90,6 +92,7 @@ export function SidebarArchiveFiles() {
       to: archiveCatalog.maxDate || '',
     });
     setQuery('');
+    selectArchiveAll();
   };
 
   const handleClearRange = () => {
@@ -334,6 +337,53 @@ export function SidebarArchiveFiles() {
           paddingRight: '2px',
         }}
       >
+        {/* All Dates Merged Quick Selector */}
+        <div
+          onClick={selectArchiveAll}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '6px 8px',
+            borderRadius: '5px',
+            background: selectedArchiveDate === null ? 'rgba(0, 237, 100, 0.12)' : 'var(--atlas-surface)',
+            border: selectedArchiveDate === null ? '1px solid rgba(0, 237, 100, 0.35)' : '1px solid var(--atlas-border)',
+            cursor: 'pointer',
+            marginBottom: '6px',
+            transition: 'all 0.15s ease',
+          }}
+          title="Display telemetry records merged across all dates in this multi-year archive"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div
+              style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                background: selectedArchiveDate === null ? 'var(--atlas-green)' : 'var(--atlas-text-secondary)',
+              }}
+            />
+            <span
+              style={{
+                fontSize: '0.72rem',
+                fontWeight: selectedArchiveDate === null ? 700 : 500,
+                color: selectedArchiveDate === null ? 'var(--atlas-text-primary)' : 'var(--atlas-text-secondary)',
+              }}
+            >
+              All Dates (Merged Full Archive)
+            </span>
+          </div>
+          <span
+            style={{
+              fontSize: '0.62rem',
+              color: selectedArchiveDate === null ? 'var(--atlas-green)' : 'var(--atlas-text-secondary)',
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            {archiveCatalog.totalFiles} files
+          </span>
+        </div>
+
         {groupedByDate.length === 0 ? (
           <div
             style={{
@@ -508,10 +558,10 @@ export function SidebarArchiveFiles() {
                     )}
                   </div>
                 );
-              })}
-            </div>
-          ))
-        )}
+                  })}
+                </div>
+              ))
+            )}
       </div>
     </div>
   );

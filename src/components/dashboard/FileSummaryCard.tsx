@@ -3,6 +3,7 @@
 import React from 'react';
 import { useAppStore } from '@/store/use-app-store';
 import { formatCsdTimestamp } from '@/lib/parser/timestamp-parser';
+import { computeArchiveSpanSummary } from '@/lib/parser/archive-aggregator';
 import {
   FileText,
   Clock,
@@ -13,17 +14,21 @@ import {
   Sparkles,
   RefreshCw,
   FolderOpen,
+  FolderArchive,
   Binary,
   UploadCloud,
   Trash2,
+  Calendar,
 } from 'lucide-react';
 
 export function FileSummaryCard() {
-  const { file, clearFile, setIsImportModalOpen, isLoading } = useAppStore();
+  const { file, activeMode, archiveCatalog, clearFile, setIsImportModalOpen, isLoading } = useAppStore();
 
   if (!file) return null;
 
   const { parsingSummary, qualitySummary, stats } = file;
+  const isArchiveMode = activeMode === 'archive' && !!archiveCatalog;
+  const spanSummary = computeArchiveSpanSummary(archiveCatalog);
 
   const startStr = stats.startTime ? formatCsdTimestamp(stats.startTime, false) : '--';
   const endStr = stats.endTime ? formatCsdTimestamp(stats.endTime, false) : '--';
@@ -34,7 +39,13 @@ export function FileSummaryCard() {
     const diffMs = stats.endTime.getTime() - stats.startTime.getTime();
     const hours = Math.floor(diffMs / (1000 * 60 * 60));
     const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-    durationStr = `${hours}h ${mins}m continuous telemetry span`;
+    if (hours > 24) {
+      const days = Math.floor(hours / 24);
+      const remHours = hours % 24;
+      durationStr = `${days}d ${remHours}h continuous multi-day telemetry span`;
+    } else {
+      durationStr = `${hours}h ${mins}m continuous telemetry span`;
+    }
   }
 
   const goodPct = qualitySummary?.goodPercentage ?? ((stats.goodRecords / stats.totalRecords) * 100);
@@ -60,7 +71,9 @@ export function FileSummaryCard() {
           left: 0,
           right: 0,
           height: '3px',
-          background: 'linear-gradient(90deg, #0284c7, #06b6d4, #10b981)',
+          background: isArchiveMode
+            ? 'linear-gradient(90deg, #10b981, #06b6d4, #0284c7)'
+            : 'linear-gradient(90deg, #0284c7, #06b6d4, #10b981)',
         }}
       />
 
@@ -82,19 +95,27 @@ export function FileSummaryCard() {
               width: '44px',
               height: '44px',
               borderRadius: '12px',
-              background: 'linear-gradient(135deg, rgba(2, 132, 199, 0.25), rgba(6, 182, 212, 0.15))',
-              border: '1px solid rgba(56, 189, 248, 0.3)',
+              background: isArchiveMode
+                ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(6, 182, 212, 0.15))'
+                : 'linear-gradient(135deg, rgba(2, 132, 199, 0.25), rgba(6, 182, 212, 0.15))',
+              border: isArchiveMode ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(56, 189, 248, 0.3)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 0 15px rgba(56, 189, 248, 0.2)',
+              boxShadow: isArchiveMode
+                ? '0 0 15px rgba(16, 185, 129, 0.2)'
+                : '0 0 15px rgba(56, 189, 248, 0.2)',
             }}
           >
-            <FileText size={22} color="var(--primary-light)" />
+            {isArchiveMode ? (
+              <FolderArchive size={22} color="var(--quality-good)" />
+            ) : (
+              <FileText size={22} color="var(--primary-light)" />
+            )}
           </div>
 
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <h2
                 className="mono-font"
                 style={{
@@ -106,6 +127,48 @@ export function FileSummaryCard() {
               >
                 {file.filename}
               </h2>
+
+              {/* Active Mode Badge Indicator */}
+              {isArchiveMode ? (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '3px 9px',
+                    borderRadius: 'var(--radius-full)',
+                    fontSize: '0.68rem',
+                    fontWeight: 700,
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    color: 'var(--quality-good)',
+                    border: '1px solid rgba(16, 185, 129, 0.35)',
+                  }}
+                  title="Multi-Year Archive Mode: dataset combines files scanned across multiple years, months, and days"
+                >
+                  <FolderArchive size={12} />
+                  MULTI-YEAR ARCHIVE MODE
+                </span>
+              ) : (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '3px 9px',
+                    borderRadius: 'var(--radius-full)',
+                    fontSize: '0.68rem',
+                    fontWeight: 700,
+                    background: 'rgba(56, 189, 248, 0.15)',
+                    color: 'var(--primary-light)',
+                    border: '1px solid rgba(56, 189, 248, 0.35)',
+                  }}
+                  title="Single File Mode: dataset contains 1 individual day CSD telemetry file"
+                >
+                  <FileText size={12} />
+                  SINGLE FILE MODE
+                </span>
+              )}
+
               <span
                 style={{
                   display: 'inline-flex',
@@ -124,6 +187,7 @@ export function FileSummaryCard() {
                 STREAM ACTIVE
               </span>
             </div>
+
             <div
               style={{
                 fontSize: '0.76rem',
@@ -132,13 +196,20 @@ export function FileSummaryCard() {
                 alignItems: 'center',
                 gap: '8px',
                 marginTop: '4px',
+                flexWrap: 'wrap',
               }}
             >
               <span>{(file.fileSize / 1024).toFixed(1)} KB binary size</span>
               <span>•</span>
               <span>Windows-1252 ANSI encoded</span>
-              <span>•</span>
-              <span>Parsed in {parsingSummary?.parseTimeMs ?? 24} ms</span>
+              {isArchiveMode && archiveCatalog && (
+                <>
+                  <span>•</span>
+                  <span style={{ color: 'var(--quality-good)', fontWeight: 600 }}>
+                    {archiveCatalog.totalFiles} files aggregated across {archiveCatalog.availableYears.length} years
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -154,7 +225,6 @@ export function FileSummaryCard() {
             <UploadCloud size={14} color="var(--primary-light)" />
             <span>Replace File</span>
           </button>
-
 
           <button
             onClick={clearFile}
@@ -173,6 +243,104 @@ export function FileSummaryCard() {
           </button>
         </div>
       </div>
+
+      {/* ─── Archive Span Summary Header Banner (Only when Multi-Year Archive is active) ─── */}
+      {isArchiveMode && archiveCatalog && (
+        <div
+          style={{
+            marginTop: '14px',
+            padding: '12px 16px',
+            borderRadius: 'var(--radius-md)',
+            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(2, 132, 199, 0.08))',
+            border: '1px solid rgba(16, 185, 129, 0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                background: 'rgba(16, 185, 129, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+              }}
+            >
+              <Calendar size={17} color="var(--quality-good)" />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                {spanSummary.title}
+              </div>
+              <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                {spanSummary.details}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <span
+              className="badge"
+              style={{
+                padding: '3px 8px',
+                fontSize: '0.72rem',
+                background: 'rgba(16, 185, 129, 0.15)',
+                color: 'var(--quality-good)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                fontWeight: 600,
+              }}
+            >
+              {spanSummary.yearsCount} Year{spanSummary.yearsCount > 1 ? 's' : ''} ({spanSummary.yearsList.join(', ')})
+            </span>
+            <span
+              className="badge"
+              style={{
+                padding: '3px 8px',
+                fontSize: '0.72rem',
+                background: 'rgba(56, 189, 248, 0.15)',
+                color: 'var(--primary-light)',
+                border: '1px solid rgba(56, 189, 248, 0.3)',
+                fontWeight: 600,
+              }}
+            >
+              {spanSummary.monthsCount} Active Months
+            </span>
+            <span
+              className="badge"
+              style={{
+                padding: '3px 8px',
+                fontSize: '0.72rem',
+                background: 'rgba(168, 85, 247, 0.15)',
+                color: '#c084fc',
+                border: '1px solid rgba(168, 85, 247, 0.3)',
+                fontWeight: 600,
+              }}
+            >
+              {spanSummary.daysCount} Dates
+            </span>
+            <span
+              className="badge"
+              style={{
+                padding: '3px 8px',
+                fontSize: '0.72rem',
+                background: 'rgba(245, 158, 11, 0.15)',
+                color: '#fbbf24',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                fontWeight: 600,
+              }}
+            >
+              {spanSummary.filesCount} Files
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Grid of Key Technical & Protocol Parameters */}
       <div

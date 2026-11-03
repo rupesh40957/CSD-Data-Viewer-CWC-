@@ -20,6 +20,7 @@ import {
   Calendar,
   TableProperties,
   ListFilter,
+  Printer,
 } from 'lucide-react';
 import { RecordDrawer } from './RecordDrawer';
 import { buildMatrixReportFromRecords } from '@/lib/export/matrix-builder';
@@ -59,7 +60,7 @@ export function DataTable() {
   const [showAllSensors, setShowAllSensors] = useState(false);
   const [highContrastGrid, setHighContrastGrid] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
-  const [exportFormat, setExportFormat] = useState<'excel' | 'csv'>('excel');
+  const [exportFormat, setExportFormat] = useState<'excel' | 'csv' | 'pdf'>('excel');
 
   // View Mode: 'matrix' (Data Report) vs 'records' (Log Records)
   const [viewMode, setViewMode] = useState<'matrix' | 'records'>('matrix');
@@ -219,6 +220,11 @@ export function DataTable() {
 
   const handleExportCsv = () => {
     setExportFormat('csv');
+    setExportModalOpen(true);
+  };
+
+  const handleExportPdf = () => {
+    setExportFormat('pdf');
     setExportModalOpen(true);
   };
 
@@ -612,6 +618,16 @@ export function DataTable() {
           >
             <Download size={13} color="#38bdf8" />
             <span>CSV (.csv)</span>
+          </button>
+
+          <button
+            onClick={handleExportPdf}
+            className="btn-secondary"
+            title="Export / Print PDF (.pdf)"
+            style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+          >
+            <Printer size={13} color="#ef4444" />
+            <span>PDF (.pdf)</span>
           </button>
         </div>
       </div>

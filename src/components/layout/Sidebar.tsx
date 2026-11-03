@@ -687,6 +687,7 @@ export function Sidebar() {
     setSidebarWidth,
     isSidebarCollapsed,
     setIsSidebarCollapsed,
+    activeMode,
     archiveCatalog,
     loadArchiveFolder,
     setIsArchiveModalOpen,
@@ -1120,6 +1121,28 @@ export function Sidebar() {
                   >
                     {file.filename}
                   </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '3px' }}>
+                  <span
+                    style={{
+                      fontSize: '0.62rem',
+                      fontWeight: 700,
+                      padding: '1px 5px',
+                      borderRadius: '3px',
+                      background: activeMode === 'archive' ? 'rgba(0, 237, 100, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+                      color: activeMode === 'archive' ? 'var(--atlas-green)' : 'var(--primary-light)',
+                      border: activeMode === 'archive' ? '1px solid rgba(0, 237, 100, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                    }}
+                  >
+                    {activeMode === 'archive' ? 'Archive Mode' : 'Single File'}
+                  </span>
+                  {activeMode === 'archive' && archiveCatalog && (
+                    <span style={{ fontSize: '0.62rem', color: 'var(--atlas-text-secondary)' }}>
+                      {archiveCatalog.totalFiles} files • {archiveCatalog.availableYears.length} Yrs
+                    </span>
+                  )}
                 </div>
 
                 {/* Clear / Disconnect Dataset Button */}
