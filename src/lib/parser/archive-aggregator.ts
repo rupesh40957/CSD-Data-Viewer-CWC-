@@ -9,7 +9,8 @@ import {
 } from '@/types/csd';
 import { StationMaster } from '@/types/station-master';
 import { ArchiveFileInfo, DynamicArchiveCatalog } from './date-extractor';
-import { decodeCsdBuffer, parseCsdContent } from './csd-parser';
+import { workerPool, ParseArchiveProgress } from './worker-pool';
+import { isValidStationId } from './csd-parser';
 
 export interface ArchiveSpanSummary {
   title: string;
@@ -139,7 +140,17 @@ export function mergeParsedCsdFiles(
 
     for (const r of pf.records) {
       allRecords.push(r);
-      const stId = (r.stationId || '').trim().toUpperCase();
+      const rawId = (r.stationId || '').trim();
+      if (!isValidStationId(rawId)) {
+        // Group all corrupt frame noise tokens under a single CORRUPT_FRAME bucket
+        const corruptKey = 'CORRUPT_FRAME';
+        if (!stationRecordMap.has(corruptKey)) {
+          stationRecordMap.set(corruptKey, []);
+        }
+        stationRecordMap.get(corruptKey)!.push(r);
+        continue;
+      }
+      const stId = rawId.toUpperCase();
       if (!stationRecordMap.has(stId)) {
         stationRecordMap.set(stId, []);
       }
@@ -165,16 +176,19 @@ export function mergeParsedCsdFiles(
     }
   }
 
-  // Build aggregated station summaries
+  // Build aggregated station summaries in a single pass without redundant array clones or sorting
   const stations: StationSummary[] = Array.from(stationRecordMap.entries()).map(([stationId, stRecords]) => {
     let stGood = 0;
     let stBad = 0;
     let stLocked = 0;
     let stUnlocked = 0;
     let stCorrupt = 0;
+    let firstSeen: Date | null = null;
+    let lastSeen: Date | null = null;
     const sensorSet = new Set<string>();
 
-    for (const r of stRecords) {
+    for (let i = 0; i < stRecords.length; i++) {
+      const r = stRecords[i];
       if (r.quality === 'Good') stGood++;
       else stBad++;
 
@@ -183,13 +197,14 @@ export function mergeParsedCsdFiles(
       else stCorrupt++;
 
       if (r.sensors) {
-        r.sensors.forEach((s) => sensorSet.add(s.key));
+        for (let s = 0; s < r.sensors.length; s++) {
+          sensorSet.add(r.sensors[s].key);
+        }
       }
-    }
 
-    const sortedSt = [...stRecords].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-    const firstSeen = sortedSt[0]?.timestamp || new Date(0);
-    const lastSeen = sortedSt[sortedSt.length - 1]?.timestamp || new Date(0);
+      if (!firstSeen || r.timestamp < firstSeen) firstSeen = r.timestamp;
+      if (!lastSeen || r.timestamp > lastSeen) lastSeen = r.timestamp;
+    }
 
     const normId = stationId.trim().toUpperCase();
     const stationMeta = stationLookup ? stationLookup.get(normId) : undefined;
@@ -206,8 +221,8 @@ export function mergeParsedCsdFiles(
       lockedCount: stLocked,
       unlockedCount: stUnlocked,
       corruptCount: stCorrupt,
-      firstSeen,
-      lastSeen,
+      firstSeen: firstSeen || new Date(0),
+      lastSeen: lastSeen || new Date(0),
       activeSensors: Array.from(sensorSet).sort(),
     };
   });
@@ -289,64 +304,44 @@ export function mergeParsedCsdFiles(
 }
 
 /**
- * Reads array buffer from File handle safely across modern browsers.
- */
-async function readFileBuffer(file: File): Promise<ArrayBuffer> {
-  if (typeof file.arrayBuffer === 'function') {
-    try {
-      return await file.arrayBuffer();
-    } catch {
-      // Fallback to FileReader below
-    }
-  }
-  return new Promise<ArrayBuffer>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as ArrayBuffer);
-    reader.onerror = () => reject(reader.error || new Error('FileReader failed'));
-    reader.readAsArrayBuffer(file);
-  });
-}
-
-/**
- * Parses and aggregates multiple archive files with smooth progress notifications.
+ * Parses and aggregates multiple archive files using the high-performance Web Worker pool
+ * with bounded concurrency, smooth progress tracking, and error recovery.
  */
 export async function aggregateArchiveFiles(
   files: ArchiveFileInfo[],
   folderName: string = 'CSD Multi-Year Archive',
   stationLookup?: Map<string, StationMaster>,
-  onProgress?: (processed: number, total: number, currentFileName: string) => void
-): Promise<{ mergedFile: CSDFile; parsedFileMap: Map<string, CSDFile> }> {
-  const parsedFiles: CSDFile[] = [];
-  const parsedFileMap = new Map<string, CSDFile>();
-  const total = files.length;
-
-  for (let i = 0; i < total; i++) {
-    const fInfo = files[i];
-    if (onProgress) {
-      onProgress(i + 1, total, fInfo.name);
-    }
-
-    try {
-      const buffer = await readFileBuffer(fInfo.fileRef);
-      const decoded = decodeCsdBuffer(buffer);
-      const parsed = parseCsdContent(decoded, fInfo.name, fInfo.size, stationLookup);
-      parsedFiles.push(parsed);
-      parsedFileMap.set(fInfo.id, parsed);
-    } catch (err) {
-      console.warn(`Failed to parse archive file ${fInfo.name}:`, err);
-    }
-
-    // Yield control to let React render progress on screen every 3 files
-    if (i % 3 === 0 || i === total - 1) {
-      await new Promise((r) => setTimeout(r, 0));
-    }
+  onProgress?: (progress: ParseArchiveProgress) => void
+): Promise<{
+  mergedFile: CSDFile;
+  parsedFileMap: Map<string, CSDFile>;
+  failedFiles: Array<{ id: string; filename: string; error: string }>;
+}> {
+  if (files.length === 0) {
+    throw new Error('No files provided to aggregate');
   }
 
+  const stationMasterList = stationLookup ? Array.from(stationLookup.values()) : undefined;
+
+  const toParse = files.map((f) => ({
+    id: f.id,
+    fileRef: f.fileRef,
+    filename: f.name,
+    fileSize: f.size,
+  }));
+
+  const { parsedFiles, parsedFileMap, failedFiles } = await workerPool.parseBatch(
+    toParse,
+    stationMasterList,
+    onProgress
+  );
+
   if (parsedFiles.length === 0) {
-    throw new Error('No valid telemetry files could be parsed in the selected folder.');
+    throw new Error(
+      `No valid telemetry files could be parsed (${failedFiles.length} files failed).`
+    );
   }
 
   const mergedFile = mergeParsedCsdFiles(parsedFiles, folderName, stationLookup);
-  return { mergedFile, parsedFileMap };
+  return { mergedFile, parsedFileMap, failedFiles };
 }
-

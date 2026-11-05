@@ -59,9 +59,12 @@ export function StationHierarchyExplorer() {
   const sensorStats = useMemo(() => {
     if (!activeStationId || !file) return [];
     const norm = activeStationId.trim().toUpperCase();
-    const stationRecords = file.records.filter(
-      (r) => r.stationId.trim().toUpperCase() === norm
-    );
+    const stationRecords: typeof file.records = [];
+    for (let i = 0; i < file.records.length; i++) {
+      if (file.records[i].stationId.trim().toUpperCase() === norm) {
+        stationRecords.push(file.records[i]);
+      }
+    }
 
     if (stationRecords.length === 0) return [];
 
@@ -86,8 +89,8 @@ export function StationHierarchyExplorer() {
         channel: 's16',
         unit: 'Mtrs',
         latest: stationRecords[stationRecords.length - 1].s16,
-        min: Math.min(...s16Vals),
-        max: Math.max(...s16Vals),
+        min: s16Vals.reduce((a, b) => Math.min(a, b), s16Vals[0]),
+        max: s16Vals.reduce((a, b) => Math.max(a, b), s16Vals[0]),
         count: s16Vals.length,
       });
     }
@@ -102,8 +105,8 @@ export function StationHierarchyExplorer() {
         channel: 's17',
         unit: 'Volt',
         latest: stationRecords[stationRecords.length - 1].s17,
-        min: Math.min(...s17Vals),
-        max: Math.max(...s17Vals),
+        min: s17Vals.reduce((a, b) => Math.min(a, b), s17Vals[0]),
+        max: s17Vals.reduce((a, b) => Math.max(a, b), s17Vals[0]),
         count: s17Vals.length,
       });
     }
@@ -118,8 +121,8 @@ export function StationHierarchyExplorer() {
         channel: 'Signal',
         unit: 'dB',
         latest: stationRecords[stationRecords.length - 1].signal.power,
-        min: Math.min(...sigVals),
-        max: Math.max(...sigVals),
+        min: sigVals.reduce((a, b) => Math.min(a, b), sigVals[0]),
+        max: sigVals.reduce((a, b) => Math.max(a, b), sigVals[0]),
         count: sigVals.length,
       });
     }

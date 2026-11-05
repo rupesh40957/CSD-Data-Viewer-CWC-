@@ -44,6 +44,22 @@ export function decodeCsdBuffer(buffer: ArrayBuffer): string {
 }
 
 /**
+ * Strict validator for CSD Station IDs:
+ * Rejects corrupt tokens ($$, frame noise, short numbers, empty strings, etc.)
+ */
+export function isValidStationId(id: string | null | undefined): boolean {
+  if (!id) return false;
+  const trimmed = id.trim();
+  if (trimmed.length < 3 || trimmed.length > 24) return false;
+  if (trimmed.includes('$$') || trimmed.includes(CORRUPT_VALUE_MARKER)) return false;
+  if (/^(unknown|corrupt|null|undefined|---)$/i.test(trimmed)) return false;
+  if (/^s\d{2}:/i.test(trimmed)) return false; // Sensor reading shifted into station column
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return false; // Date shifted into station column
+  if (/^-?\d+(\.\d+)?$/.test(trimmed) && trimmed.length < 5) return false; // Short float
+  return /^[A-Za-z0-9_\-\.\/]+$/.test(trimmed);
+}
+
+/**
  * Main parser function: takes ArrayBuffer or decoded text and produces structured CSDFile.
  * Optionally accepts stationLookup Map to enrich records with Station Master metadata on parse.
  */
@@ -94,7 +110,9 @@ export function parseCsdContent(
       if (fields.length < 5) continue; // Skip completely malformed garbage lines
     }
 
-    const stationId = (fields[FIELD_POSITIONS.STATION_ID] || '').trim();
+    const rawStationId = (fields[FIELD_POSITIONS.STATION_ID] || '').trim();
+    const isStationValid = isValidStationId(rawStationId);
+    const stationId = rawStationId;
     const timestampRaw = (fields[FIELD_POSITIONS.TIMESTAMP] || '').trim();
     const timeOffset = (fields[FIELD_POSITIONS.TIME_OFFSET] || '').trim();
     const statusRaw = fields[FIELD_POSITIONS.STATUS] || '';
@@ -153,6 +171,9 @@ export function parseCsdContent(
     if (status === '$') {
       recordErrors.push('Status flagged as corrupted ($)');
     }
+    if (!isStationValid) {
+      recordErrors.push('Invalid station ID token');
+    }
 
     const normId = stationId.trim().toUpperCase();
     const stationMeta = stationLookup ? stationLookup.get(normId) : undefined;
@@ -185,11 +206,12 @@ export function parseCsdContent(
 
     records.push(record);
 
-    // Grouping by station
-    if (!stationMap.has(stationId)) {
-      stationMap.set(stationId, []);
+    // Grouping by station - only index valid stations, corrupt tokens grouped under CORRUPT_FRAME
+    const groupingKey = isStationValid ? stationId : (rawStationId.length > 0 ? 'CORRUPT_FRAME' : 'UNKNOWN');
+    if (!stationMap.has(groupingKey)) {
+      stationMap.set(groupingKey, []);
     }
-    stationMap.get(stationId)!.push(record);
+    stationMap.get(groupingKey)!.push(record);
 
     // Stats aggregation
     if (quality === 'Good') goodCount++;

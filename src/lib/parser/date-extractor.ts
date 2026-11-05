@@ -1,7 +1,7 @@
 /**
  * Dynamic Multi-Year Date Extraction & Telemetry Archive Indexer
  * 
- * Supports any number of years (1, 2, 3, 5, 10+ years or future ranges)
+ * Supports dynamic, nested folder traversal (1 to 3+ years: `CSD Archive/YYYY/MM/Daily files`)
  * with zero hardcoded dates, zero hardcoded years, and zero fixed durations.
  */
 
@@ -16,7 +16,7 @@ export interface ArchiveFileInfo {
   month: number;        // 1 - 12
   day: number;          // 1 - 31
   fileRef: File;        // Browser File handle for lazy ArrayBuffer loading
-  relativePath?: string;
+  relativePath: string;
   formattedSize: string;
   timeTag?: string;     // e.g. '05:30' or 'Copy 1' if extracted from filename
 }
@@ -60,6 +60,21 @@ const SHORT_MONTH_NAMES = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
 ];
 
+const MONTH_NAME_MAP: Record<string, number> = {
+  jan: 1, january: 1,
+  feb: 2, february: 2,
+  mar: 3, march: 3,
+  apr: 4, april: 4,
+  may: 5,
+  jun: 6, june: 6,
+  jul: 7, july: 7,
+  aug: 8, august: 8,
+  sep: 9, september: 9,
+  oct: 10, october: 10,
+  nov: 11, november: 11,
+  dec: 12, december: 12,
+};
+
 export function formatHumanDate(year: number, month: number, day: number): string {
   if (!year || !month || !day) return 'Unknown Date';
   const m = SHORT_MONTH_NAMES[month - 1] || pad(month);
@@ -67,17 +82,19 @@ export function formatHumanDate(year: number, month: number, day: number): strin
 }
 
 /**
- * Dynamically extract Year, Month, Day from any .csd filename.
+ * Dynamically extract Year, Month, Day from any .csd filename or path.
  * Supports:
  * - YYYYMMDD (e.g. '20260929.csd', '20240515 (1).csd', '20231102_0530.csd')
  * - YYYY-MM-DD or YYYY_MM_DD (e.g. '2025-08-14.csd')
  * - DD-MM-YYYY or DD_MM_YYYY (e.g. '29-09-2022.csd')
  * - Filename prefixes (e.g. 'CSD_20210310.csd', 'AWS_20260929.csd')
- * - Fallback to file.lastModified timestamp if no date pattern in filename
+ * - Nested path segment detection (e.g. 'Archive/2024/05/15.csd', 'Archive/2023/Oct/file_12.csd')
+ * - Fallback to file.lastModified timestamp if no date pattern in filename/path
  */
 export function parseDateFromCsdFilename(
   filename: string,
-  lastModifiedMs?: number
+  lastModifiedMs?: number,
+  relativePath?: string
 ): {
   dateKey: string;
   displayDate: string;
@@ -99,7 +116,6 @@ export function parseDateFromCsdFilename(
     const dateKey = `${year}-${pad(month)}-${pad(day)}`;
     const displayDate = `${pad(day)}/${pad(month)}/${year}`;
 
-    // Extract optional secondary time or copy tag
     let timeTag: string | undefined;
     const copyMatch = cleanName.match(/\((\d+)\)/);
     const hourMatch = cleanName.match(/_(\d{2})(\d{2})/);
@@ -144,6 +160,54 @@ export function parseDateFromCsdFilename(
     };
   }
 
+  // Pattern 4: Inspect nested folder segments in relativePath (e.g. '2024/05/15.csd' or '2023/October/24.csd')
+  if (relativePath) {
+    const normalized = relativePath.replace(/\\/g, '/');
+    const segments = normalized.split('/').filter(Boolean);
+
+    let foundYear: number | null = null;
+    let foundMonth: number | null = null;
+    let foundDay: number | null = null;
+
+    for (let i = 0; i < segments.length - 1; i++) {
+      const seg = segments[i].trim();
+      const yMatch = seg.match(/\b(19\d{2}|20\d{2})\b/);
+      if (yMatch) {
+        foundYear = parseInt(yMatch[1], 10);
+      }
+
+      const mMatch = seg.match(/\b(0[1-9]|1[0-2])\b/);
+      if (mMatch) {
+        foundMonth = parseInt(mMatch[1], 10);
+      } else {
+        const lowerSeg = seg.toLowerCase();
+        for (const [mName, mNum] of Object.entries(MONTH_NAME_MAP)) {
+          if (lowerSeg === mName || lowerSeg.startsWith(mName)) {
+            foundMonth = mNum;
+            break;
+          }
+        }
+      }
+    }
+
+    // Try to find day from filename (e.g. '15.csd', 'day_15.csd', '01.csd')
+    const dayMatch = cleanName.match(/(?:^|[^0-9])(0[1-9]|[12]\d|3[01])(?:[^0-9]|$)/);
+    if (dayMatch) {
+      foundDay = parseInt(dayMatch[1], 10);
+    }
+
+    if (foundYear && foundMonth && foundDay) {
+      return {
+        dateKey: `${foundYear}-${pad(foundMonth)}-${pad(foundDay)}`,
+        displayDate: `${pad(foundDay)}/${pad(foundMonth)}/${foundYear}`,
+        year: foundYear,
+        month: foundMonth,
+        day: foundDay,
+        isValid: true,
+      };
+    }
+  }
+
   // Fallback: Use file's last modified date if available
   if (lastModifiedMs && !isNaN(lastModifiedMs) && lastModifiedMs > 0) {
     const d = new Date(lastModifiedMs);
@@ -161,7 +225,7 @@ export function parseDateFromCsdFilename(
     };
   }
 
-  // Unknown / unparsed date fallback
+  // Unknown date fallback
   return {
     dateKey: 'unknown-date',
     displayDate: 'Unknown Date',
@@ -173,22 +237,45 @@ export function parseDateFromCsdFilename(
 }
 
 /**
- * Scan a list of File objects (from folder picker or input),
- * dynamically index them by year/month/date, and construct the DynamicArchiveCatalog.
+ * Normalizes any date string (e.g. '20261001', '2026-10-01', '2026/10/01')
+ * into canonical ISO 'YYYY-MM-DD' format for accurate lexicographical comparison.
+ */
+export function normalizeIsoDate(d: string | null | undefined): string {
+  if (!d) return '';
+  const clean = d.trim().replace(/\//g, '-');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) return clean;
+  if (/^\d{8}$/.test(clean)) {
+    return `${clean.slice(0, 4)}-${clean.slice(4, 6)}-${clean.slice(6, 8)}`;
+  }
+  return clean;
+}
+
+/**
+ * Scan a list of File objects (from nested folder picker or drag & drop),
+ * dynamically index them by year/month/date, deduplicate duplicate files,
+ * and construct the DynamicArchiveCatalog.
  * 
- * Works for any duration: 1 month, 1 year, 2 years, 5 years, 10+ years.
+ * Works for any nested depth and any duration: 1 month, 1 year, 2 years, 3+ years.
  */
 export function buildDynamicArchiveCatalog(
   files: File[],
   folderName: string = 'Telemetry Archive'
 ): DynamicArchiveCatalog {
-  const csdFiles: File[] = [];
+  const supportedExtensions = ['.csd', '.txt', '.xlsx', '.xls', '.csv'];
+  const validFiles: File[] = [];
+  const seenFiles = new Set<string>();
 
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
-    const lower = f.name.toLowerCase();
-    if (lower.endsWith('.csd') || lower.endsWith('.txt')) {
-      csdFiles.push(f);
+    const nameLower = f.name.toLowerCase();
+    const isSupported = supportedExtensions.some((ext) => nameLower.endsWith(ext));
+    if (!isSupported) continue;
+
+    // Deduplicate by relative path or name + size
+    const dedupKey = f.webkitRelativePath ? f.webkitRelativePath : `${f.name}_${f.size}_${f.lastModified}`;
+    if (!seenFiles.has(dedupKey)) {
+      seenFiles.add(dedupKey);
+      validFiles.push(f);
     }
   }
 
@@ -197,8 +284,10 @@ export function buildDynamicArchiveCatalog(
   const yearMonthsMap: Record<number, Set<number>> = {};
   const allFiles: ArchiveFileInfo[] = [];
 
-  csdFiles.forEach((file, index) => {
-    const parsed = parseDateFromCsdFilename(file.name, file.lastModified);
+  validFiles.forEach((file, index) => {
+    const relPath = file.webkitRelativePath || file.name;
+    const parsed = parseDateFromCsdFilename(file.name, file.lastModified, relPath);
+
     const fileInfo: ArchiveFileInfo = {
       id: `arch-${index}-${file.name}`,
       name: file.name,
@@ -210,7 +299,7 @@ export function buildDynamicArchiveCatalog(
       month: parsed.month,
       day: parsed.day,
       fileRef: file,
-      relativePath: file.webkitRelativePath || file.name,
+      relativePath: relPath,
       formattedSize: formatFileSize(file.size),
       timeTag: parsed.timeTag,
     };
@@ -231,7 +320,7 @@ export function buildDynamicArchiveCatalog(
     }
   });
 
-  // Sort available years chronologically ascending (e.g. [2021, 2022, 2023, 2024, 2025, 2026])
+  // Sort available years chronologically ascending (e.g. [2022, 2023, 2024, 2025, 2026])
   const availableYears = Array.from(yearSet).sort((a, b) => a - b);
 
   // Convert Set of months to sorted arrays for each year
@@ -253,7 +342,7 @@ export function buildDynamicArchiveCatalog(
 
   return {
     folderName,
-    totalFiles: csdFiles.length,
+    totalFiles: validFiles.length,
     files: allFiles,
     availableYears,
     yearMonthsMap: normalizedYearMonthsMap,

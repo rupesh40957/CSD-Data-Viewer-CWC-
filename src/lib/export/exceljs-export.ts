@@ -1,11 +1,12 @@
 /**
  * Professional Excel (.xlsx) Exporter using ExcelJS
  * Implements full styling: multi-level headers, navy title, station grouping merges,
- * thin/medium borders, zebra striping, freeze panes, auto-fit widths, and print layout.
+ * thin/medium borders, zebra striping, freeze panes, auto-fit widths, multi-worksheet splitting,
+ * and chunked streaming generation to eliminate memory spikes.
  */
 
 import ExcelJS from 'exceljs';
-import { MatrixReportModel } from './types';
+import { MatrixReportModel, StationColumnGroup } from './types';
 import { CsdRecord } from '@/types/csd';
 import { ExportSections, formatRecordsForExport, DEFAULT_EXPORT_SECTIONS } from '../utils/export';
 import { InsatSensorConfig } from '../insat/types';
@@ -27,6 +28,7 @@ const COLOR_BORDER_SEP = 'FF64748B';    // Station divider border
 const COLOR_BORDER_HEADER = 'FF475569'; // Header bottom border
 
 const FONT_FAMILY = 'Arial';
+const MAX_ROWS_PER_SHEET = 500000; // Safety threshold below Excel's 1,048,576 limit
 
 const THIN_BORDER: ExcelJS.Border = {
   style: 'thin',
@@ -40,76 +42,68 @@ const CELL_BORDER_DEFAULT: Partial<ExcelJS.Borders> = {
   right: THIN_BORDER,
 };
 
+// Cached style and font references to eliminate millions of object allocations during export
+const CELL_BORDER_NORMAL: Partial<ExcelJS.Borders> = {
+  top: THIN_BORDER,
+  bottom: THIN_BORDER,
+  left: THIN_BORDER,
+  right: THIN_BORDER,
+};
+const CELL_BORDER_BOUNDARY: Partial<ExcelJS.Borders> = {
+  top: THIN_BORDER,
+  bottom: THIN_BORDER,
+  left: THIN_BORDER,
+  right: { style: 'medium', color: { argb: COLOR_BORDER_SEP } },
+};
+const FILL_ZEBRA_ODD: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_ZEBRA_ODD } };
+const FILL_ZEBRA_EVEN: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_ZEBRA_EVEN } };
+const FONT_DATA_DEFAULT: Partial<ExcelJS.Font> = { name: FONT_FAMILY, size: 9, color: { argb: 'FF0F172A' } };
+const FONT_EMPTY_DEFAULT: Partial<ExcelJS.Font> = { name: FONT_FAMILY, size: 9, color: { argb: 'FF94A3B8' } };
+const FONT_TIME: Partial<ExcelJS.Font> = { name: 'Consolas, monospace', size: 9, bold: true, color: { argb: 'FF0F172A' } };
+
 /**
- * Generate a styled ExcelJS Workbook from a MatrixReportModel.
+ * Configure standard CWC header rows 1-6 for a Matrix worksheet.
  */
-export function createMatrixExcelWorkbook(model: MatrixReportModel): ExcelJS.Workbook {
-  const wb = new ExcelJS.Workbook();
-  wb.creator = 'Central Water Commission (CWC)';
-  wb.lastModifiedBy = 'CWC Telemetry System';
-  wb.created = new Date();
-  wb.modified = new Date();
+function setupMatrixHeaders(
+  ws: ExcelJS.Worksheet,
+  model: MatrixReportModel,
+  stationGroups: StationColumnGroup[],
+  totalCols: number,
+  sheetIndex: number,
+  totalSheets: number
+): void {
+  const safeCols = Math.min(totalCols, 16384);
 
-  const ws = wb.addWorksheet('Sheet1', {
-    pageSetup: {
-      orientation: 'landscape',
-      paperSize: 9, // A4
-      fitToPage: false,
-      margins: { left: 0.7, right: 0.7, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 },
-      printTitlesRow: '1:6', // Repeat rows 1-6 on every printed page
-    },
-    views: [
-      {
-        state: 'frozen',
-        xSplit: 1,
-        ySplit: 6,
-        topLeftCell: 'B7',
-        showGridLines: true,
-      },
-    ],
-  });
-
-  const totalCols = model.totalColumns;
-
-  // -------------------------------------------------------------
   // Row 1: Report Title & Period
-  // Matches official CWC template: Pure White background, thick top/bottom borders.
-  // Populated in Cell A1 (frozen column) AND merged across each station group
-  // so that regardless of whether there are 1, 19, or 900+ stations (thousands of columns),
-  // the report title and dynamic period are immediately visible on screen and never lost offscreen.
-  // Line 1: Bold Black, Line 2: Bold Royal Blue (#002060)
-  // -------------------------------------------------------------
   const row1 = ws.getRow(1);
   row1.height = 48;
 
-  // Merge Row 1 across the entire report width (A1 to totalCols)
-  if (totalCols > 1) {
-    ws.mergeCells(1, 1, 1, totalCols);
+  if (safeCols > 1) {
+    ws.mergeCells(1, 1, 1, safeCols);
   }
 
-  // Format all cells in Row 1 with white fill and thick borders
-  for (let c = 1; c <= totalCols; c++) {
+  for (let c = 1; c <= safeCols; c++) {
     const cell = row1.getCell(c);
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
     cell.border = {
       top: { style: 'thick', color: { argb: 'FF000000' } },
       bottom: { style: 'thick', color: { argb: 'FF000000' } },
       left: c === 1 ? { style: 'thick', color: { argb: 'FF000000' } } : undefined,
-      right: c === totalCols ? { style: 'thick', color: { argb: 'FF000000' } } : undefined,
+      right: c === safeCols ? { style: 'thick', color: { argb: 'FF000000' } } : undefined,
     };
   }
 
-  // Master cell A1: Displays title & dynamic period across the entire sheet
+  const partSuffix = totalSheets > 1 ? ` (Part ${sheetIndex + 1} of ${totalSheets})` : '';
   const cellA1 = row1.getCell(1);
   cellA1.value = {
     richText: [
       {
-        text: 'Telemetry Data Received at Central Receiving Station during\r\n',
+        text: `Telemetry Data Received at Central Receiving Station during${partSuffix}\r\n`,
         font: {
           name: FONT_FAMILY,
           size: 14,
           bold: true,
-          color: { argb: 'FF000000' }, // Bold Black
+          color: { argb: 'FF000000' },
         },
       },
       {
@@ -118,299 +112,348 @@ export function createMatrixExcelWorkbook(model: MatrixReportModel): ExcelJS.Wor
           name: FONT_FAMILY,
           size: 13,
           bold: true,
-          color: { argb: 'FF002060' }, // Bold Royal Blue (matches official template)
+          color: { argb: 'FF002060' }, // Royal Blue
         },
       },
     ],
   };
   cellA1.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
 
-  // -------------------------------------------------------------
-  // Row 2: Station Names & Date Header
-  // -------------------------------------------------------------
+  // Row 2: Station Names
   const row2 = ws.getRow(2);
-  row2.height = 38;
-
-  // Cell A2: "Date and Time (IST)" (Merged A2:A3)
+  row2.height = 24;
   const cellA2 = row2.getCell(1);
   cellA2.value = model.dateColumnHeader;
   cellA2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_STATION_BG } };
   cellA2.font = { name: FONT_FAMILY, size: 10, bold: true, color: { argb: COLOR_STATION_TXT } };
-  cellA2.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+  cellA2.alignment = { horizontal: 'center', vertical: 'middle' };
   cellA2.border = {
-    top: { style: 'thin', color: { argb: COLOR_BORDER_THIN } },
-    bottom: { style: 'thin', color: { argb: COLOR_BORDER_THIN } },
+    top: { style: 'thick', color: { argb: 'FF000000' } },
+    bottom: THIN_BORDER,
     left: { style: 'medium', color: { argb: COLOR_BORDER_SEP } },
     right: { style: 'medium', color: { argb: COLOR_BORDER_SEP } },
   };
 
-  // Station Group Headers in Row 2
-  for (const group of model.stationGroups) {
-    const startCol = group.startColIndex + 1; // 1-based in ExcelJS
-    const endCol = startCol + group.colSpan - 1;
-
-    for (let c = startCol; c <= endCol; c++) {
-      const cell = row2.getCell(c);
-      cell.value = group.stationName;
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_STATION_BG } };
-      cell.font = { name: FONT_FAMILY, size: 11, bold: true, color: { argb: COLOR_STATION_TXT } };
-      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      cell.border = {
-        top: { style: 'thin', color: { argb: COLOR_BORDER_THIN } },
-        bottom: { style: 'thin', color: { argb: COLOR_BORDER_THIN } },
-        left: c === startCol ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
-        right: c === endCol ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
-      };
-    }
-
-    // Merge station columns in Row 2
-    if (endCol > startCol) {
-      ws.mergeCells(2, startCol, 2, endCol);
-    }
-  }
-
-  // -------------------------------------------------------------
   // Row 3: Sensor Parameter Names
-  // -------------------------------------------------------------
   const row3 = ws.getRow(3);
-  row3.height = 30;
-
-  // Cell A3 is merged with A2
+  row3.height = 22;
   const cellA3 = row3.getCell(1);
   cellA3.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_STATION_BG } };
   cellA3.border = {
-    top: { style: 'thin', color: { argb: COLOR_BORDER_THIN } },
-    bottom: { style: 'thin', color: { argb: COLOR_BORDER_THIN } },
+    top: THIN_BORDER,
+    bottom: THIN_BORDER,
     left: { style: 'medium', color: { argb: COLOR_BORDER_SEP } },
     right: { style: 'medium', color: { argb: COLOR_BORDER_SEP } },
   };
-  ws.mergeCells(2, 1, 3, 1); // Merge A2:A3
+  ws.mergeCells(2, 1, 3, 1); // Merge A2:A3 for Date and Time (IST)
 
-  for (const group of model.stationGroups) {
-    const startCol = group.startColIndex + 1;
-    const endCol = startCol + group.colSpan - 1;
-
-    group.sensors.forEach((s, idx) => {
-      const colNum = startCol + idx;
-      const cell = row3.getCell(colNum);
-      cell.value = s.name;
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_SENSOR_BG } };
-      cell.font = { name: FONT_FAMILY, size: 9, bold: true, color: { argb: COLOR_SENSOR_TXT } };
-      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      cell.border = {
-        top: { style: 'thin', color: { argb: COLOR_BORDER_THIN } },
-        bottom: { style: 'thin', color: { argb: COLOR_BORDER_THIN } },
-        left: colNum === startCol ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
-        right: colNum === endCol ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
-      };
-    });
-  }
-
-  // -------------------------------------------------------------
   // Row 4: WIMS Station Code
-  // -------------------------------------------------------------
   const row4 = ws.getRow(4);
   row4.height = 18;
   const cellA4 = row4.getCell(1);
   cellA4.value = 'WIMS Station Code';
   cellA4.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_WIMS_BG } };
-  cellA4.font = { name: FONT_FAMILY, size: 9, italic: true, bold: true, color: { argb: 'FF475569' } };
-  cellA4.alignment = { horizontal: 'left', vertical: 'middle' };
+  cellA4.font = { name: FONT_FAMILY, size: 8, bold: true, color: { argb: 'FF475569' } };
+  cellA4.alignment = { horizontal: 'center', vertical: 'middle' };
   cellA4.border = {
-    top: { style: 'thin', color: { argb: COLOR_BORDER_THIN } },
-    bottom: { style: 'thin', color: { argb: COLOR_BORDER_THIN } },
+    top: THIN_BORDER,
+    bottom: THIN_BORDER,
     left: { style: 'medium', color: { argb: COLOR_BORDER_SEP } },
     right: { style: 'medium', color: { argb: COLOR_BORDER_SEP } },
   };
 
-  for (const group of model.stationGroups) {
-    const startCol = group.startColIndex + 1;
-    const endCol = startCol + group.colSpan - 1;
-
-    for (let c = startCol; c <= endCol; c++) {
-      const cell = row4.getCell(c);
-      cell.value = group.wimsCode || '';
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_WIMS_BG } };
-      cell.font = { name: FONT_FAMILY, size: 8, color: { argb: 'FF64748B' } };
-      cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      cell.border = {
-        top: { style: 'thin', color: { argb: COLOR_BORDER_THIN } },
-        bottom: { style: 'thin', color: { argb: COLOR_BORDER_THIN } },
-        left: c === startCol ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
-        right: c === endCol ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
-      };
-    }
-  }
-
-  // -------------------------------------------------------------
   // Row 5: Datalogger ID
-  // -------------------------------------------------------------
   const row5 = ws.getRow(5);
   row5.height = 18;
   const cellA5 = row5.getCell(1);
   cellA5.value = 'Datalogger ID';
   cellA5.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_ID_BG } };
-  cellA5.font = { name: FONT_FAMILY, size: 9, bold: true, color: { argb: 'FF334155' } };
-  cellA5.alignment = { horizontal: 'left', vertical: 'middle' };
+  cellA5.font = { name: FONT_FAMILY, size: 8, bold: true, color: { argb: 'FF475569' } };
+  cellA5.alignment = { horizontal: 'center', vertical: 'middle' };
   cellA5.border = {
-    top: { style: 'thin', color: { argb: COLOR_BORDER_THIN } },
-    bottom: { style: 'thin', color: { argb: COLOR_BORDER_THIN } },
+    top: THIN_BORDER,
+    bottom: THIN_BORDER,
     left: { style: 'medium', color: { argb: COLOR_BORDER_SEP } },
     right: { style: 'medium', color: { argb: COLOR_BORDER_SEP } },
   };
 
-  for (const group of model.stationGroups) {
-    const startCol = group.startColIndex + 1;
-    const endCol = startCol + group.colSpan - 1;
-
-    for (let c = startCol; c <= endCol; c++) {
-      const cell = row5.getCell(c);
-      cell.value = group.stationId;
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_ID_BG } };
-      cell.font = { name: 'Consolas, monospace', size: 9, bold: true, color: { argb: 'FF1E293B' } };
-      cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      cell.border = {
-        top: { style: 'thin', color: { argb: COLOR_BORDER_THIN } },
-        bottom: { style: 'thin', color: { argb: COLOR_BORDER_THIN } },
-        left: c === startCol ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
-        right: c === endCol ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
-      };
-    }
-  }
-
-  // -------------------------------------------------------------
   // Row 6: Sensor Unit
-  // -------------------------------------------------------------
   const row6 = ws.getRow(6);
   row6.height = 18;
   const cellA6 = row6.getCell(1);
   cellA6.value = 'Sensor Unit   ';
   cellA6.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_UNIT_BG } };
-  cellA6.font = { name: FONT_FAMILY, size: 9, color: { argb: 'FF475569' } };
-  cellA6.alignment = { horizontal: 'left', vertical: 'middle' };
+  cellA6.font = { name: FONT_FAMILY, size: 8, italic: true, color: { argb: 'FF64748B' } };
+  cellA6.alignment = { horizontal: 'center', vertical: 'middle' };
   cellA6.border = {
-    top: { style: 'thin', color: { argb: COLOR_BORDER_THIN } },
+    top: THIN_BORDER,
     bottom: { style: 'double', color: { argb: COLOR_BORDER_HEADER } },
     left: { style: 'medium', color: { argb: COLOR_BORDER_SEP } },
     right: { style: 'medium', color: { argb: COLOR_BORDER_SEP } },
   };
 
-  for (const group of model.stationGroups) {
-    const startCol = group.startColIndex + 1;
-    const endCol = startCol + group.colSpan - 1;
+  let curCol = 2;
+  for (const group of stationGroups) {
+    const startCol = curCol;
+    const endCol = Math.min(startCol + group.colSpan - 1, 16384);
+    if (startCol > 16384) break;
 
-    group.sensors.forEach((s, idx) => {
-      const colNum = startCol + idx;
-      const cell = row6.getCell(colNum);
-      cell.value = s.unit || '';
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_UNIT_BG } };
-      cell.font = { name: FONT_FAMILY, size: 8, color: { argb: 'FF64748B' } };
-      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    // Row 2: Station Name
+    for (let c = startCol; c <= endCol; c++) {
+      const cell = row2.getCell(c);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_STATION_BG } };
       cell.border = {
-        top: { style: 'thin', color: { argb: COLOR_BORDER_THIN } },
+        top: { style: 'thick', color: { argb: 'FF000000' } },
+        bottom: THIN_BORDER,
+        left: c === startCol ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
+        right: c === endCol ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
+      };
+    }
+    if (endCol > startCol) {
+      ws.mergeCells(2, startCol, 2, endCol);
+    }
+    const stCell = row2.getCell(startCol);
+    stCell.value = group.stationName;
+    stCell.font = { name: FONT_FAMILY, size: 10, bold: true, color: { argb: COLOR_STATION_TXT } };
+    stCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    // Row 3: Sensor Names & Row 6: Sensor Units
+    group.sensors.forEach((s: { name: string; unit?: string }, idx: number) => {
+      const colNum = startCol + idx;
+      if (colNum > 16384) return;
+      const cell3 = row3.getCell(colNum);
+      cell3.value = s.name;
+      cell3.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_SENSOR_BG } };
+      cell3.font = { name: FONT_FAMILY, size: 9, bold: true, color: { argb: COLOR_SENSOR_TXT } };
+      cell3.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell3.border = {
+        top: THIN_BORDER,
+        bottom: THIN_BORDER,
+        left: colNum === startCol ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
+        right: colNum === endCol ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
+      };
+
+      const cell6 = row6.getCell(colNum);
+      cell6.value = s.unit || '';
+      cell6.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_UNIT_BG } };
+      cell6.font = { name: FONT_FAMILY, size: 8, color: { argb: 'FF64748B' } };
+      cell6.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell6.border = {
+        top: THIN_BORDER,
         bottom: { style: 'double', color: { argb: COLOR_BORDER_HEADER } },
         left: colNum === startCol ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
         right: colNum === endCol ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
       };
     });
-  }
 
-  // -------------------------------------------------------------
-  // Rows 7+: Telemetry Data Rows
-  // -------------------------------------------------------------
-  let currentExcelRow = 7;
-
-  // Pre-calculate boundary columns for fast styling
-  const boundaryColSet = new Set<number>();
-  for (const group of model.stationGroups) {
-    boundaryColSet.add(group.startColIndex + group.colSpan);
-  }
-
-  model.timestamps.forEach((ts, rowIdx) => {
-    const row = ws.getRow(currentExcelRow);
-    row.height = 16.5;
-    const isOdd = rowIdx % 2 === 1;
-    const rowBgColor = isOdd ? COLOR_ZEBRA_ODD : COLOR_ZEBRA_EVEN;
-
-    const rowData = model.grid.get(ts) || [ts];
-
-    // Col 1: Timestamp
-    const dateCell = row.getCell(1);
-    dateCell.value = ts;
-    dateCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBgColor } };
-    dateCell.font = { name: 'Consolas, monospace', size: 9, bold: true, color: { argb: 'FF0F172A' } };
-    dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
-    dateCell.border = {
-      top: THIN_BORDER,
-      bottom: THIN_BORDER,
-      left: { style: 'medium', color: { argb: COLOR_BORDER_SEP } },
-      right: { style: 'medium', color: { argb: COLOR_BORDER_SEP } },
-    };
-
-    // Columns 2..N
-    for (let c = 2; c <= totalCols; c++) {
-      const cell = row.getCell(c);
-      const rawVal = rowData[c - 1];
-      const isBoundary = boundaryColSet.has(c);
-
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBgColor } };
+    // Row 4: WIMS Code
+    for (let c = startCol; c <= endCol; c++) {
+      const cell = row4.getCell(c);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_WIMS_BG } };
       cell.border = {
         top: THIN_BORDER,
         bottom: THIN_BORDER,
-        left: THIN_BORDER,
-        right: isBoundary ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
+        left: c === startCol ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
+        right: c === endCol ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
       };
-
-      if (rawVal === undefined || rawVal === null || rawVal === '---') {
-        cell.value = '---';
-        cell.font = { name: FONT_FAMILY, size: 9, color: { argb: 'FF94A3B8' } };
-        cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      } else if (typeof rawVal === 'number') {
-        cell.value = rawVal;
-        cell.font = { name: FONT_FAMILY, size: 9, color: { argb: 'FF0F172A' } };
-        cell.alignment = { horizontal: 'right', vertical: 'middle' };
-        cell.numFmt = Number.isInteger(rawVal) ? '#,##0' : '#,##0.00';
-      } else {
-        const strVal = String(rawVal);
-        cell.value = strVal;
-        cell.font = { name: FONT_FAMILY, size: 9, color: { argb: 'FF0F172A' } };
-
-        if (strVal.includes('Lock') || strVal.includes('Unlock')) {
-          cell.alignment = { horizontal: 'center', vertical: 'middle' };
-          if (strVal.includes('Unlock')) {
-            cell.font = { name: FONT_FAMILY, size: 9, bold: true, color: { argb: 'FFD97706' } }; // Amber
-          }
-        } else if (strVal.startsWith('~') || strVal.startsWith('?') || strVal.startsWith('§')) {
-          cell.alignment = { horizontal: 'right', vertical: 'middle' };
-          if (strVal.startsWith('?')) {
-            cell.font = { name: FONT_FAMILY, size: 9, color: { argb: 'FFDC2626' } }; // Red
-          }
-        } else {
-          cell.alignment = { horizontal: 'center', vertical: 'middle' };
-        }
-      }
     }
+    if (endCol > startCol) {
+      ws.mergeCells(4, startCol, 4, endCol);
+    }
+    const wimsCell = row4.getCell(startCol);
+    wimsCell.value = group.wimsCode || '';
+    wimsCell.font = { name: FONT_FAMILY, size: 8, color: { argb: 'FF475569' } };
+    wimsCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-    currentExcelRow++;
-  });
+    // Row 5: Datalogger ID
+    for (let c = startCol; c <= endCol; c++) {
+      const cell = row5.getCell(c);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_ID_BG } };
+      cell.border = {
+        top: THIN_BORDER,
+        bottom: THIN_BORDER,
+        left: c === startCol ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
+        right: c === endCol ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
+      };
+    }
+    if (endCol > startCol) {
+      ws.mergeCells(5, startCol, 5, endCol);
+    }
+    const idCell = row5.getCell(startCol);
+    idCell.value = group.stationId;
+    idCell.font = { name: FONT_FAMILY, size: 9, bold: true, color: { argb: 'FF0F172A' } };
+    idCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  // -------------------------------------------------------------
-  // Auto-fit Column Widths (with min/max limits)
-  // -------------------------------------------------------------
-  ws.getColumn(1).width = 20; // Date column
+    curCol += group.colSpan;
+  }
 
-  for (let c = 2; c <= totalCols; c++) {
-    // Find sensor name in Row 3
+  // Auto-fit Column Widths
+  ws.getColumn(1).width = 20;
+  for (let c = 2; c <= safeCols; c++) {
     const sensorName = String(row3.getCell(c).value || '');
     const unitName = String(row6.getCell(c).value || '');
     const headerLen = Math.max(sensorName.length, unitName.length);
-
-    // Default between 11 and 24
     let colWidth = Math.max(11, Math.min(24, headerLen + 3));
     if (sensorName.toLowerCase().includes('reportingtime')) {
       colWidth = 22;
     }
     ws.getColumn(c).width = colWidth;
+  }
+}
+
+const MAX_STATIONS_PER_SHEET = 1500; // 1500 stations * 6 sensors = 9000 columns <= 16384
+
+/**
+ * Generate a styled ExcelJS Workbook from a MatrixReportModel.
+ * Supports multi-sheet splitting for huge multi-year datasets and partitions stations horizontally
+ * if total columns would exceed Excel's 16,384 column limit.
+ */
+export async function createMatrixExcelWorkbook(
+  model: MatrixReportModel,
+  onProgress?: (pct: number, stage: string) => void
+): Promise<ExcelJS.Workbook> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Central Water Commission (CWC)';
+  wb.lastModifiedBy = 'CWC Telemetry System';
+  wb.created = new Date();
+  wb.modified = new Date();
+
+  const allStationGroups = model.stationGroups;
+  const stationPartitions: StationColumnGroup[][] = [];
+  if (allStationGroups.length === 0) {
+    stationPartitions.push([]);
+  } else {
+    for (let i = 0; i < allStationGroups.length; i += MAX_STATIONS_PER_SHEET) {
+      stationPartitions.push(allStationGroups.slice(i, i + MAX_STATIONS_PER_SHEET));
+    }
+  }
+
+  const timestamps = model.timestamps;
+  const totalRows = timestamps.length;
+  const rowChunksCount = Math.max(1, Math.ceil(totalRows / MAX_ROWS_PER_SHEET));
+  const totalSheets = stationPartitions.length * rowChunksCount;
+
+  let sheetCounter = 0;
+
+  for (let pIdx = 0; pIdx < stationPartitions.length; pIdx++) {
+    const partitionGroups = stationPartitions[pIdx];
+    const sheetTotalCols = 1 + partitionGroups.reduce((sum, g) => sum + g.colSpan, 0);
+    const safeCols = Math.min(sheetTotalCols, 16384);
+
+    // Pre-calculate boundary column set for this partition
+    const boundaryColSet = new Set<number>();
+    let colTrack = 1;
+    for (const g of partitionGroups) {
+      colTrack += g.colSpan;
+      boundaryColSet.add(colTrack);
+    }
+
+    for (let rChunk = 0; rChunk < rowChunksCount; rChunk++) {
+      sheetCounter++;
+      let sheetName = 'Sheet1';
+      if (totalSheets > 1) {
+        if (stationPartitions.length > 1 && rowChunksCount > 1) {
+          sheetName = `Part_S${pIdx + 1}_R${rChunk + 1}`;
+        } else if (stationPartitions.length > 1) {
+          sheetName = `Part_${pIdx + 1}`;
+        } else {
+          sheetName = `Sheet1_Part${rChunk + 1}`;
+        }
+      }
+
+      const ws = wb.addWorksheet(sheetName, {
+        pageSetup: {
+          orientation: 'landscape',
+          paperSize: 9, // A4
+          fitToPage: false,
+          margins: { left: 0.7, right: 0.7, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 },
+          printTitlesRow: '1:6',
+        },
+        views: [
+          {
+            state: 'frozen',
+            xSplit: 1,
+            ySplit: 6,
+            topLeftCell: 'B7',
+            showGridLines: true,
+          },
+        ],
+      });
+
+      setupMatrixHeaders(ws, model, partitionGroups, safeCols, sheetCounter - 1, totalSheets);
+
+      const startIdx = rChunk * MAX_ROWS_PER_SHEET;
+      const endIdx = Math.min(totalRows, startIdx + MAX_ROWS_PER_SHEET);
+      const sheetTimestamps = timestamps.slice(startIdx, endIdx);
+
+      let currentExcelRow = 7;
+
+      for (let rIdx = 0; rIdx < sheetTimestamps.length; rIdx++) {
+        // Yield to browser event loop every 25 rows to keep UI responsive and report progress
+        if (rIdx % 25 === 0) {
+          if (onProgress) {
+            const pct = 40 + Math.round((rIdx / sheetTimestamps.length) * 38);
+            onProgress(pct, `Formatting matrix rows: ${rIdx + 1} / ${sheetTimestamps.length}`);
+          }
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+
+        const ts = sheetTimestamps[rIdx];
+        const row = ws.getRow(currentExcelRow);
+        row.height = 16.5;
+        const isOdd = rIdx % 2 === 1;
+        const rowFill = isOdd ? FILL_ZEBRA_ODD : FILL_ZEBRA_EVEN;
+
+        const rowData = model.grid.get(ts) || [ts];
+
+        // Col 1: Timestamp
+        const dateCell = row.getCell(1);
+        dateCell.value = ts;
+        dateCell.fill = rowFill;
+        dateCell.font = FONT_TIME;
+        dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        dateCell.border = {
+          top: THIN_BORDER,
+          bottom: THIN_BORDER,
+          left: { style: 'medium', color: { argb: COLOR_BORDER_SEP } },
+          right: { style: 'medium', color: { argb: COLOR_BORDER_SEP } },
+        };
+
+        // Write columns for station groups in this partition
+        let curCellCol = 2;
+        for (const group of partitionGroups) {
+          if (curCellCol > 16384) break;
+          for (const s of group.sensors) {
+            if (curCellCol > 16384) break;
+            const cell = row.getCell(curCellCol);
+            const rawVal = rowData[s.colIndex];
+            const isBoundary = boundaryColSet.has(curCellCol);
+
+            cell.fill = rowFill;
+            cell.border = isBoundary ? CELL_BORDER_BOUNDARY : CELL_BORDER_NORMAL;
+
+            if (rawVal === undefined || rawVal === null || rawVal === '---') {
+              cell.value = '---';
+              cell.font = FONT_EMPTY_DEFAULT;
+              cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            } else if (typeof rawVal === 'number') {
+              cell.value = rawVal;
+              cell.font = FONT_DATA_DEFAULT;
+              cell.alignment = { horizontal: 'right', vertical: 'middle' };
+              cell.numFmt = Number.isInteger(rawVal) ? '#,##0' : '#,##0.00';
+            } else {
+              cell.value = rawVal;
+              cell.font = FONT_DATA_DEFAULT;
+              cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            }
+
+            curCellCol++;
+          }
+        }
+
+        currentExcelRow++;
+      }
+    }
   }
 
   return wb;
@@ -418,6 +461,7 @@ export function createMatrixExcelWorkbook(model: MatrixReportModel): ExcelJS.Wor
 
 /**
  * Generate a styled ExcelJS Workbook for Flattened Tabular Records.
+ * Splits into multiple worksheets if rows exceed MAX_ROWS_PER_SHEET.
  */
 export function createFlatExcelWorkbook(
   records: CsdRecord[],
@@ -429,69 +473,83 @@ export function createFlatExcelWorkbook(
   wb.creator = 'Central Water Commission (CWC)';
   wb.created = new Date();
 
-  const ws = wb.addWorksheet('Records Export', {
-    pageSetup: {
-      orientation: 'landscape',
-      paperSize: 9,
-      fitToPage: false,
-    },
-    views: [{ state: 'frozen', ySplit: 1 }],
-  });
-
   const flatData = formatRecordsForExport(records, sections, insatSensors, insatMSL);
-  if (flatData.length === 0) return wb;
+  if (flatData.length === 0) {
+    wb.addWorksheet('Records Export');
+    return wb;
+  }
 
   const colKeys = Object.keys(flatData[0]);
+  const totalRows = flatData.length;
+  const totalSheets = Math.max(1, Math.ceil(totalRows / MAX_ROWS_PER_SHEET));
 
-  // Header Row
-  const headerRow = ws.getRow(1);
-  headerRow.height = 28;
-
-  colKeys.forEach((key, idx) => {
-    const cell = headerRow.getCell(idx + 1);
-    cell.value = key;
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_TITLE_BG } };
-    cell.font = { name: FONT_FAMILY, size: 10, bold: true, color: { argb: COLOR_TITLE_TXT } };
-    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    cell.border = CELL_BORDER_DEFAULT;
-  });
-
-  // Data Rows
-  flatData.forEach((rowObj, rIdx) => {
-    const row = ws.getRow(rIdx + 2);
-    row.height = 18;
-    const isOdd = rIdx % 2 === 1;
-    const rowBgColor = isOdd ? COLOR_ZEBRA_ODD : COLOR_ZEBRA_EVEN;
-
-    colKeys.forEach((key, cIdx) => {
-      const cell = row.getCell(cIdx + 1);
-      const val = rowObj[key];
-
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBgColor } };
-      cell.border = CELL_BORDER_DEFAULT;
-
-      if (val === null || val === undefined) {
-        cell.value = '---';
-        cell.alignment = { horizontal: 'center', vertical: 'middle' };
-        cell.font = { name: FONT_FAMILY, size: 9, color: { argb: 'FF94A3B8' } };
-      } else if (typeof val === 'number') {
-        cell.value = val;
-        cell.alignment = { horizontal: 'right', vertical: 'middle' };
-        cell.font = { name: FONT_FAMILY, size: 9, color: { argb: 'FF0F172A' } };
-        cell.numFmt = Number.isInteger(val) ? '#,##0' : '#,##0.00';
-      } else {
-        cell.value = String(val);
-        cell.alignment = { horizontal: 'left', vertical: 'middle' };
-        cell.font = { name: FONT_FAMILY, size: 9, color: { argb: 'FF0F172A' } };
-      }
+  for (let sIdx = 0; sIdx < totalSheets; sIdx++) {
+    const sheetName = totalSheets === 1 ? 'Records Export' : `Records_Part${sIdx + 1}`;
+    const ws = wb.addWorksheet(sheetName, {
+      pageSetup: {
+        orientation: 'landscape',
+        paperSize: 9,
+        fitToPage: false,
+      },
+      views: [{ state: 'frozen', ySplit: 1 }],
     });
-  });
 
-  // Column Widths
-  colKeys.forEach((key, idx) => {
-    const len = key.length;
-    ws.getColumn(idx + 1).width = Math.max(12, Math.min(32, len + 4));
-  });
+    // Header Row
+    const headerRow = ws.getRow(1);
+    headerRow.height = 28;
+
+    colKeys.forEach((key, idx) => {
+      const cell = headerRow.getCell(idx + 1);
+      cell.value = key;
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_TITLE_BG } };
+      cell.font = { name: FONT_FAMILY, size: 10, bold: true, color: { argb: COLOR_TITLE_TXT } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.border = CELL_BORDER_DEFAULT;
+    });
+
+    const startIdx = sIdx * MAX_ROWS_PER_SHEET;
+    const endIdx = Math.min(totalRows, startIdx + MAX_ROWS_PER_SHEET);
+    const sheetData = flatData.slice(startIdx, endIdx);
+
+    // Data Rows
+    for (let rIdx = 0; rIdx < sheetData.length; rIdx++) {
+      const rowObj = sheetData[rIdx];
+      const row = ws.getRow(rIdx + 2);
+      row.height = 18;
+      const isOdd = rIdx % 2 === 1;
+      const rowBgColor = isOdd ? COLOR_ZEBRA_ODD : COLOR_ZEBRA_EVEN;
+
+      for (let cIdx = 0; cIdx < colKeys.length; cIdx++) {
+        const key = colKeys[cIdx];
+        const cell = row.getCell(cIdx + 1);
+        const val = rowObj[key];
+
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBgColor } };
+        cell.border = CELL_BORDER_DEFAULT;
+
+        if (val === null || val === undefined) {
+          cell.value = '---';
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          cell.font = { name: FONT_FAMILY, size: 9, color: { argb: 'FF94A3B8' } };
+        } else if (typeof val === 'number') {
+          cell.value = val;
+          cell.alignment = { horizontal: 'right', vertical: 'middle' };
+          cell.font = { name: FONT_FAMILY, size: 9, color: { argb: 'FF0F172A' } };
+          cell.numFmt = Number.isInteger(val) ? '#,##0' : '#,##0.00';
+        } else {
+          cell.value = String(val);
+          cell.alignment = { horizontal: 'left', vertical: 'middle' };
+          cell.font = { name: FONT_FAMILY, size: 9, color: { argb: 'FF0F172A' } };
+        }
+      }
+    }
+
+    // Column Widths
+    colKeys.forEach((key, idx) => {
+      const len = key.length;
+      ws.getColumn(idx + 1).width = Math.max(12, Math.min(32, len + 4));
+    });
+  }
 
   return wb;
 }
@@ -520,4 +578,3 @@ export async function downloadExcelWorkbook(
     setTimeout(() => URL.revokeObjectURL(url), 2000);
   }
 }
-

@@ -24,6 +24,7 @@ export function DateArchiveNavigator() {
     archiveMergedFile,
     selectedArchiveDate,
     selectedArchiveFileId,
+    activeArchiveRange,
     loadArchiveFolder,
     selectArchiveDate,
     selectArchiveAll,
@@ -68,8 +69,8 @@ export function DateArchiveNavigator() {
           justifyContent: 'space-between',
           flexWrap: 'wrap',
           gap: '12px',
-          border: '1px solid rgba(56, 189, 248, 0.3)',
-          background: 'linear-gradient(135deg, rgba(13, 21, 39, 0.85), rgba(17, 28, 53, 0.75))',
+          border: '1px solid var(--border)',
+          background: 'var(--bg-surface)',
         }}
       >
         <input
@@ -197,7 +198,8 @@ export function DateArchiveNavigator() {
     }
   };
 
-  const isViewingAll = selectedArchiveDate === null;
+  const isViewingAll = selectedArchiveDate === null && !activeArchiveRange;
+  const isViewingRange = selectedArchiveDate === null && activeArchiveRange !== null;
 
   return (
     <div
@@ -209,8 +211,9 @@ export function DateArchiveNavigator() {
         justifyContent: 'space-between',
         flexWrap: 'wrap',
         gap: '12px',
-        border: '1px solid rgba(16, 185, 129, 0.35)',
-        background: 'linear-gradient(135deg, rgba(13, 21, 39, 0.85), rgba(17, 28, 53, 0.75))',
+        border: '1px solid var(--border)',
+        background: 'var(--bg-card)',
+        boxShadow: 'var(--shadow-sm)',
       }}
     >
       <input
@@ -234,11 +237,11 @@ export function DateArchiveNavigator() {
             gap: '6px',
             padding: '4px 10px',
             borderRadius: 'var(--radius-full)',
-            background: 'rgba(16, 185, 129, 0.15)',
-            border: '1px solid rgba(16, 185, 129, 0.35)',
+            background: 'var(--tag-green-bg)',
+            border: '1px solid var(--tag-green-border)',
             fontSize: '0.74rem',
             fontWeight: 700,
-            color: 'var(--quality-good)',
+            color: 'var(--tag-green)',
           }}
           title={`Multi-Year Archive Mode: ${archiveCatalog.totalFiles} files across ${archiveCatalog.availableYears.length} years (${archiveCatalog.availableYears.join(', ')})`}
         >
@@ -358,6 +361,52 @@ export function DateArchiveNavigator() {
 
       {/* Right: Available Files on Date & Explorer Modal Launcher */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        {/* Full span active badge when viewing all */}
+        {isViewingAll && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--quality-good)', fontWeight: 700 }}>
+              SPAN ({archiveCatalog.totalFiles} files):
+            </span>
+            <span
+              className="mono-font"
+              style={{
+                fontSize: '0.74rem',
+                color: 'var(--text-main)',
+                background: 'var(--tag-green-bg)',
+                border: '1px solid var(--tag-green-border)',
+                padding: '4px 8px',
+                borderRadius: '4px',
+                fontWeight: 600,
+              }}
+            >
+              {archiveCatalog.minDate} → {archiveCatalog.maxDate}
+            </span>
+          </div>
+        )}
+
+        {/* Selected Range active badge */}
+        {isViewingRange && activeArchiveRange && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '0.72rem', color: '#38bdf8', fontWeight: 700 }}>
+              RANGE ({activeArchiveRange.count} files):
+            </span>
+            <span
+              className="mono-font"
+              style={{
+                fontSize: '0.74rem',
+                color: 'var(--text-main)',
+                background: 'var(--bg-subtle)',
+                border: '1px solid var(--border)',
+                padding: '4px 8px',
+                borderRadius: '4px',
+                fontWeight: 600,
+              }}
+            >
+              {activeArchiveRange.from} → {activeArchiveRange.to}
+            </span>
+          </div>
+        )}
+
         {/* Available Files on Date dropdown */}
         {selectedArchiveDate && filesOnSelectedDate.length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -399,8 +448,8 @@ export function DateArchiveNavigator() {
           style={{
             padding: '5px 11px',
             fontSize: '0.75rem',
-            background: 'rgba(56, 189, 248, 0.1)',
-            borderColor: 'rgba(56, 189, 248, 0.3)',
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border)',
             color: 'var(--primary-light)',
             height: '30px',
           }}

@@ -100,10 +100,11 @@ export function selectFilteredRecords(state: AppStore): CSDRecord[] {
   }
 
   const q = searchQuery.toLowerCase().trim();
+  const stationSet = hasStationFilter ? new Set(selectedStations.map((s) => s.toUpperCase())) : null;
 
   cachedFilteredRecords = file.records.filter((r) => {
-    // 1. Station filter
-    if (hasStationFilter && !selectedStations.includes(r.stationId)) {
+    // 1. Station filter with fast O(1) Set lookup
+    if (stationSet && !stationSet.has(r.stationId.toUpperCase())) {
       return false;
     }
 

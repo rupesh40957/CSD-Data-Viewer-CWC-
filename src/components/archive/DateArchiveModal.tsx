@@ -45,6 +45,8 @@ export function DateArchiveModal() {
     setArchiveDateRange,
     loadArchiveFolder,
     selectArchiveDate,
+    selectArchiveAll,
+    selectArchiveRange,
     loadArchiveFile,
     isArchiveModalOpen,
     setIsArchiveModalOpen,
@@ -251,7 +253,7 @@ export function DateArchiveModal() {
                 border: '2px dashed rgba(56, 189, 248, 0.35)',
                 borderRadius: 'var(--radius-lg)',
                 padding: '44px 24px',
-                background: 'rgba(17, 28, 53, 0.4)',
+                background: 'var(--bg-subtle)',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
               }}
@@ -284,7 +286,7 @@ export function DateArchiveModal() {
             <div
               style={{
                 padding: '12px 20px',
-                background: 'linear-gradient(135deg, rgba(13, 21, 39, 0.95), rgba(17, 28, 53, 0.9))',
+                background: 'var(--bg-card)',
                 borderBottom: '1px solid var(--border)',
                 display: 'flex',
                 alignItems: 'center',
@@ -432,8 +434,17 @@ export function DateArchiveModal() {
 
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     setIsArchiveModalOpen(false);
+                    if (filesInRange.length === archiveCatalog.totalFiles) {
+                      selectArchiveAll();
+                    } else if (filesInRange.length === 1) {
+                      await loadArchiveFile(filesInRange[0]);
+                    } else if (filesInRange.length > 1) {
+                      const from = archiveDateRange?.from || archiveCatalog.minDate || '';
+                      const to = archiveDateRange?.to || archiveCatalog.maxDate || '';
+                      await selectArchiveRange(from, to);
+                    }
                     router.push('/table');
                   }}
                   className="btn-primary"
@@ -444,6 +455,7 @@ export function DateArchiveModal() {
                     alignItems: 'center',
                     gap: '6px',
                     boxShadow: '0 0 12px rgba(0, 237, 100, 0.25)',
+                    cursor: isLoading ? 'wait' : 'pointer',
                   }}
                 >
                   <span>Apply & View in Sidebar / Table</span>

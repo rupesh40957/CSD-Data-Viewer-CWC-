@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/store/use-app-store';
-import { ArchiveFileInfo } from '@/lib/parser/date-extractor';
+import { ArchiveFileInfo, normalizeIsoDate } from '@/lib/parser/date-extractor';
 import {
   Calendar,
   FileText,
@@ -14,6 +14,7 @@ import {
   SlidersHorizontal,
   ChevronRight,
   Filter,
+  Layers,
 } from 'lucide-react';
 
 export function SidebarArchiveFiles() {
@@ -22,6 +23,8 @@ export function SidebarArchiveFiles() {
     archiveCatalog,
     selectedArchiveDate,
     selectArchiveAll,
+    selectArchiveRange,
+    activeArchiveRange,
     archiveDateRange,
     setArchiveDateRange,
     selectedArchiveFileId,
@@ -37,8 +40,8 @@ export function SidebarArchiveFiles() {
   const filteredFiles = useMemo(() => {
     if (!archiveCatalog || !archiveCatalog.files) return [];
 
-    const from = archiveDateRange?.from?.trim() || '';
-    const to = archiveDateRange?.to?.trim() || '';
+    const from = normalizeIsoDate(archiveDateRange?.from);
+    const to = normalizeIsoDate(archiveDateRange?.to);
     const q = query.trim().toLowerCase();
 
     return archiveCatalog.files.filter((f) => {
@@ -86,6 +89,9 @@ export function SidebarArchiveFiles() {
     return null;
   }
 
+  const isViewingAll = selectedArchiveDate === null && !activeArchiveRange;
+  const isViewingRange = selectedArchiveDate === null && activeArchiveRange !== null;
+
   const handleResetToAll = () => {
     setArchiveDateRange({
       from: archiveCatalog.minDate || '',
@@ -95,9 +101,37 @@ export function SidebarArchiveFiles() {
     selectArchiveAll();
   };
 
+  const handlePreset = async (days: number) => {
+    if (!archiveCatalog || !archiveCatalog.maxDate) return;
+    const maxD = new Date(archiveCatalog.maxDate);
+    const minD = new Date(maxD);
+    minD.setDate(minD.getDate() - (days - 1));
+    const minCatalog = archiveCatalog.minDate ? new Date(archiveCatalog.minDate) : minD;
+    const effectiveMin = minD < minCatalog ? minCatalog : minD;
+    const fromStr = effectiveMin.toISOString().slice(0, 10);
+    const toStr = archiveCatalog.maxDate;
+    await selectArchiveRange(fromStr, toStr);
+  };
+
   const handleClearRange = () => {
     setArchiveDateRange({ from: '', to: '' });
     setQuery('');
+  };
+
+  const handleFromChange = (val: string) => {
+    const toVal = archiveDateRange?.to || '';
+    setArchiveDateRange({ from: val, to: toVal });
+    if (val && toVal && val <= toVal) {
+      selectArchiveRange(val, toVal);
+    }
+  };
+
+  const handleToChange = (val: string) => {
+    const fromVal = archiveDateRange?.from || '';
+    setArchiveDateRange({ from: fromVal, to: val });
+    if (fromVal && val && fromVal <= val) {
+      selectArchiveRange(fromVal, val);
+    }
   };
 
   const isFiltered =
@@ -185,12 +219,7 @@ export function SidebarArchiveFiles() {
           <input
             type="date"
             value={archiveDateRange?.from || ''}
-            onChange={(e) =>
-              setArchiveDateRange({
-                from: e.target.value,
-                to: archiveDateRange?.to || '',
-              })
-            }
+            onChange={(e) => handleFromChange(e.target.value)}
             className="mono-font"
             style={{
               width: '100%',
@@ -198,7 +227,7 @@ export function SidebarArchiveFiles() {
               fontSize: '0.68rem',
               borderRadius: '4px',
               background: 'var(--bg-app)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              border: '1px solid var(--border)',
               color: 'var(--atlas-text-primary)',
               outline: 'none',
               cursor: 'pointer',
@@ -223,12 +252,7 @@ export function SidebarArchiveFiles() {
           <input
             type="date"
             value={archiveDateRange?.to || ''}
-            onChange={(e) =>
-              setArchiveDateRange({
-                from: archiveDateRange?.from || '',
-                to: e.target.value,
-              })
-            }
+            onChange={(e) => handleToChange(e.target.value)}
             className="mono-font"
             style={{
               width: '100%',
@@ -236,13 +260,97 @@ export function SidebarArchiveFiles() {
               fontSize: '0.68rem',
               borderRadius: '4px',
               background: 'var(--bg-app)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              border: '1px solid var(--border)',
               color: 'var(--atlas-text-primary)',
               outline: 'none',
               cursor: 'pointer',
             }}
           />
         </div>
+      </div>
+
+      {/* ─── Range Presets Bar ─── */}
+      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '-2px' }}>
+        <button
+          onClick={handleResetToAll}
+          style={{
+            background: 'rgba(0, 237, 100, 0.08)',
+            border: '1px solid rgba(0, 237, 100, 0.25)',
+            borderRadius: '3px',
+            padding: '2px 6px',
+            fontSize: '0.62rem',
+            color: 'var(--atlas-green)',
+            cursor: 'pointer',
+            fontWeight: 600,
+          }}
+          title="All dates in archive"
+        >
+          All
+        </button>
+        <button
+          onClick={() => handlePreset(7)}
+          style={{
+            background: 'var(--atlas-surface)',
+            border: '1px solid var(--atlas-border)',
+            borderRadius: '3px',
+            padding: '2px 6px',
+            fontSize: '0.62rem',
+            color: 'var(--atlas-text-secondary)',
+            cursor: 'pointer',
+            fontWeight: 600,
+          }}
+          title="Last 7 days"
+        >
+          7D
+        </button>
+        <button
+          onClick={() => handlePreset(30)}
+          style={{
+            background: 'var(--atlas-surface)',
+            border: '1px solid var(--atlas-border)',
+            borderRadius: '3px',
+            padding: '2px 6px',
+            fontSize: '0.62rem',
+            color: 'var(--atlas-text-secondary)',
+            cursor: 'pointer',
+            fontWeight: 600,
+          }}
+          title="Last 30 days / 1 Month"
+        >
+          30D
+        </button>
+        <button
+          onClick={() => handlePreset(180)}
+          style={{
+            background: 'var(--atlas-surface)',
+            border: '1px solid var(--atlas-border)',
+            borderRadius: '3px',
+            padding: '2px 6px',
+            fontSize: '0.62rem',
+            color: 'var(--atlas-text-secondary)',
+            cursor: 'pointer',
+            fontWeight: 600,
+          }}
+          title="Last 6 months"
+        >
+          6M
+        </button>
+        <button
+          onClick={() => handlePreset(365)}
+          style={{
+            background: 'var(--atlas-surface)',
+            border: '1px solid var(--atlas-border)',
+            borderRadius: '3px',
+            padding: '2px 6px',
+            fontSize: '0.62rem',
+            color: 'var(--atlas-text-secondary)',
+            cursor: 'pointer',
+            fontWeight: 600,
+          }}
+          title="Last 1 year"
+        >
+          1Y
+        </button>
       </div>
 
       {/* ─── Quick Presets & File Counter Bar ─── */}
@@ -346,8 +454,8 @@ export function SidebarArchiveFiles() {
             justifyContent: 'space-between',
             padding: '6px 8px',
             borderRadius: '5px',
-            background: selectedArchiveDate === null ? 'rgba(0, 237, 100, 0.12)' : 'var(--atlas-surface)',
-            border: selectedArchiveDate === null ? '1px solid rgba(0, 237, 100, 0.35)' : '1px solid var(--atlas-border)',
+            background: isViewingAll ? 'rgba(0, 237, 100, 0.12)' : 'var(--atlas-surface)',
+            border: isViewingAll ? '1px solid rgba(0, 237, 100, 0.35)' : '1px solid var(--atlas-border)',
             cursor: 'pointer',
             marginBottom: '6px',
             transition: 'all 0.15s ease',
@@ -360,14 +468,14 @@ export function SidebarArchiveFiles() {
                 width: '6px',
                 height: '6px',
                 borderRadius: '50%',
-                background: selectedArchiveDate === null ? 'var(--atlas-green)' : 'var(--atlas-text-secondary)',
+                background: isViewingAll ? 'var(--atlas-green)' : 'var(--atlas-text-secondary)',
               }}
             />
             <span
               style={{
                 fontSize: '0.72rem',
-                fontWeight: selectedArchiveDate === null ? 700 : 500,
-                color: selectedArchiveDate === null ? 'var(--atlas-text-primary)' : 'var(--atlas-text-secondary)',
+                fontWeight: isViewingAll ? 700 : 500,
+                color: isViewingAll ? 'var(--atlas-text-primary)' : 'var(--atlas-text-secondary)',
               }}
             >
               All Dates (Merged Full Archive)
@@ -376,13 +484,71 @@ export function SidebarArchiveFiles() {
           <span
             style={{
               fontSize: '0.62rem',
-              color: selectedArchiveDate === null ? 'var(--atlas-green)' : 'var(--atlas-text-secondary)',
+              color: isViewingAll ? 'var(--atlas-green)' : 'var(--atlas-text-secondary)',
               fontFamily: 'var(--font-mono)',
             }}
           >
             {archiveCatalog.totalFiles} files
           </span>
         </div>
+
+        {/* Selected Range Merged Quick Selector */}
+        {filteredFiles.length > 0 && filteredFiles.length < archiveCatalog.totalFiles && (
+          <div
+            onClick={async () => {
+              if (isLoading) return;
+              const from = archiveDateRange?.from || archiveCatalog.minDate || '';
+              const to = archiveDateRange?.to || archiveCatalog.maxDate || '';
+              await selectArchiveRange(from, to);
+              router.push('/table');
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '6px 8px',
+              borderRadius: '5px',
+              background: isViewingRange ? 'rgba(56, 189, 248, 0.16)' : 'var(--atlas-surface)',
+              border: isViewingRange ? '1px solid #38bdf8' : '1px solid rgba(56, 189, 248, 0.3)',
+              cursor: isLoading ? 'wait' : 'pointer',
+              marginBottom: '6px',
+              transition: 'all 0.15s ease',
+              boxShadow: isViewingRange ? '0 0 10px rgba(56, 189, 248, 0.25)' : 'none',
+            }}
+            title="Display telemetry records merged across all dates in this selected range"
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div
+                style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  background: isViewingRange ? '#38bdf8' : 'var(--atlas-text-secondary)',
+                  boxShadow: isViewingRange ? '0 0 6px #38bdf8' : 'none',
+                }}
+              />
+              <span
+                style={{
+                  fontSize: '0.72rem',
+                  fontWeight: isViewingRange ? 700 : 600,
+                  color: isViewingRange ? '#38bdf8' : 'var(--atlas-text-primary)',
+                }}
+              >
+                Selected Range ({filteredFiles.length} files)
+              </span>
+            </div>
+            <span
+              style={{
+                fontSize: '0.62rem',
+                color: isViewingRange ? '#38bdf8' : 'var(--atlas-text-secondary)',
+                fontFamily: 'var(--font-mono)',
+                fontWeight: isViewingRange ? 700 : 500,
+              }}
+            >
+              {isViewingRange ? 'ACTIVE' : 'Load Range'}
+            </span>
+          </div>
+        )}
 
         {groupedByDate.length === 0 ? (
           <div
@@ -547,8 +713,8 @@ export function SidebarArchiveFiles() {
                             fontSize: '0.58rem',
                             padding: '0 4px',
                             borderRadius: '3px',
-                            background: 'rgba(255, 255, 255, 0.05)',
-                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                            background: 'var(--bg-subtle)',
+                            border: '1px solid var(--border)',
                             color: 'var(--atlas-text-secondary)',
                           }}
                         >

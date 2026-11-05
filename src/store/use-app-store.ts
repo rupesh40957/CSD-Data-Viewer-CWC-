@@ -27,12 +27,26 @@ import {
   DynamicArchiveCatalog,
   ArchiveFileInfo,
   buildDynamicArchiveCatalog,
+  normalizeIsoDate,
 } from '@/lib/parser/date-extractor';
 import {
   aggregateArchiveFiles,
   computeArchiveSpanSummary,
   mergeParsedCsdFiles,
 } from '@/lib/parser/archive-aggregator';
+import { workerPool } from '@/lib/parser/worker-pool';
+import { selectFilteredRecords } from './selectors/records-selectors';
+
+export interface ArchiveProcessingStatus {
+  isProcessing: boolean;
+  stage: string;
+  processed: number;
+  total: number;
+  recordsParsed: number;
+  failedCount: number;
+  percentage: number;
+  errors: Array<{ id: string; filename: string; error: string }>;
+}
 
 // Initialize synchronous in-memory Station Master Map with bundled 1,054 stations
 const initialStationMasterMap = new Map<string, StationMaster>();
@@ -193,15 +207,28 @@ export interface AppStore {
   archiveCatalog: DynamicArchiveCatalog | null;
   selectedArchiveDate: string | null;
   selectedArchiveFileId: string | null;
+  activeArchiveRange: { from: string; to: string; count: number } | null;
   archiveDateRange: { from: string; to: string };
   isArchiveModalOpen: boolean;
+  archiveProcessingStatus: ArchiveProcessingStatus | null;
+  clearArchiveProcessingStatus: () => void;
 
   loadArchiveFolder: (files: File[], folderName?: string) => Promise<void>;
   selectArchiveDate: (dateKey: string) => void;
+  selectArchiveRange: (from: string, to: string) => Promise<void>;
   setArchiveDateRange: (range: { from: string; to: string }) => void;
   loadArchiveFile: (fileInfo: ArchiveFileInfo) => Promise<void>;
   navigateArchiveDate: (direction: 'prev' | 'next') => void;
   setIsArchiveModalOpen: (open: boolean) => void;
+  getRecordsForExport: (
+    scope: 'all_archive' | 'filtered',
+    onProgress?: (pct: number, stage: string) => void
+  ) => Promise<{
+    records: CSDRecord[];
+    sourceFile: CSDFile;
+    startDate?: Date | null;
+    endDate?: Date | null;
+  }>;
 }
 
 const DEFAULT_CHART_CONFIG: ChartConfig = {
@@ -376,6 +403,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       archiveMergedFile: isSingle ? null : get().archiveMergedFile,
       selectedArchiveDate: isSingle ? null : get().selectedArchiveDate,
       selectedArchiveFileId: isSingle ? null : get().selectedArchiveFileId,
+      activeArchiveRange: isSingle ? null : get().activeArchiveRange,
       archiveDateRange: isSingle ? { from: '', to: '' } : get().archiveDateRange,
       isLoading: false,
       parseProgress: '',
@@ -396,7 +424,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   setError: (error) => set({ error, isLoading: false, parseProgress: '' }),
 
-  clearFile: () =>
+  clearFile: () => {
+    try {
+      workerPool.terminate();
+    } catch {}
     set({
       file: null,
       activeMode: 'single',
@@ -405,14 +436,17 @@ export const useAppStore = create<AppStore>((set, get) => ({
       parsedArchiveFileMap: new Map(),
       selectedArchiveDate: null,
       selectedArchiveFileId: null,
+      activeArchiveRange: null,
       archiveDateRange: { from: '', to: '' },
+      archiveProcessingStatus: null,
       selectedStations: [],
       selectedRecordId: null,
       parseErrors: [],
       error: null,
       dateRange: { start: null, end: null },
       tablePage: 1,
-    }),
+    });
+  },
 
   setSelectedRecordId: (selectedRecordId) => set({ selectedRecordId }),
 
@@ -604,11 +638,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
       return { theme: next };
     }),
 
-  parseFileBuffer: (buffer: ArrayBuffer, filename: string, size: number) => {
+  parseFileBuffer: async (buffer: ArrayBuffer, filename: string, size: number) => {
     try {
       set({
         isLoading: true,
-        parseProgress: 'Decoding Windows-1252 binary stream...',
+        parseProgress: 'Parsing CSD telemetry stream in background worker...',
         activeMode: 'single',
         archiveCatalog: null,
         archiveMergedFile: null,
@@ -618,9 +652,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
         archiveDateRange: { from: '', to: '' },
         dateRange: { start: null, end: null },
       });
-      const decoded = decodeCsdBuffer(buffer);
-      set({ parseProgress: 'Parsing 21-field records & sensor telemetry...' });
-      const parsed = parseCsdContent(decoded, filename, size, get().stationMasterMap);
+
+      const parsed = await workerPool.parseSingle(
+        buffer,
+        filename,
+        size,
+        get().stationMasterList
+      );
       get().setFile(parsed, 'single');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to parse .csd file';
@@ -635,7 +673,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       if (!res.ok) throw new Error(`HTTP Error: ${res.status} ${res.statusText}`);
 
       const buffer = await res.arrayBuffer();
-      get().parseFileBuffer(buffer, '20260929.csd', buffer.byteLength);
+      await get().parseFileBuffer(buffer, '20260929.csd', buffer.byteLength);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to load telemetry dataset';
       set({ error: msg, isLoading: false, parseProgress: '' });
@@ -646,11 +684,19 @@ export const useAppStore = create<AppStore>((set, get) => ({
   archiveCatalog: null,
   selectedArchiveDate: null,
   selectedArchiveFileId: null,
+  activeArchiveRange: null,
   archiveDateRange: { from: '', to: '' },
   isArchiveModalOpen: false,
+  archiveProcessingStatus: null,
 
+  clearArchiveProcessingStatus: () => set({ archiveProcessingStatus: null }),
   setIsArchiveModalOpen: (isArchiveModalOpen) => set({ isArchiveModalOpen }),
-  setArchiveDateRange: (archiveDateRange) => set({ archiveDateRange }),
+  setArchiveDateRange: (archiveDateRange) => {
+    set({ archiveDateRange });
+    if (archiveDateRange.from && archiveDateRange.to) {
+      get().selectArchiveRange(archiveDateRange.from, archiveDateRange.to);
+    }
+  },
 
   loadArchiveFolder: async (files, folderName = 'Telemetry Archive') => {
     try {
@@ -667,27 +713,30 @@ export const useAppStore = create<AppStore>((set, get) => ({
         return;
       }
 
-      const initialDate = catalog.maxDate || catalog.minDate || null;
+      const minDate = catalog.minDate || '';
+      const maxDate = catalog.maxDate || '';
 
-      // Switch smoothly to multi-year archive mode with populated date ranges
+      // Default to Full Archive Span (Date 1 to Date Last)
       set({
         activeMode: 'archive',
         archiveCatalog: catalog,
-        selectedArchiveDate: initialDate,
+        selectedArchiveDate: null, // "All Dates (Full Archive)" active by default
         selectedArchiveFileId: null,
+        activeArchiveRange: null,
         archiveDateRange: {
-          from: catalog.minDate || '',
-          to: catalog.maxDate || '',
+          from: minDate,
+          to: maxDate,
         },
         dateRange: { start: null, end: null },
         isLoading: false,
         parseProgress: '',
       });
 
-      // Instantly load the latest available day to ensure responsive UI
-      if (initialDate && catalog.dateFileMap[initialDate]?.length > 0) {
-        const firstFile = catalog.dateFileMap[initialDate][0];
-        await get().loadArchiveFile(firstFile);
+      // Default: Load the full archive span so "1 se last tak select rahata hai"
+      if (catalog.totalFiles === 1) {
+        await get().loadArchiveFile(catalog.files[0]);
+      } else {
+        await get().selectArchiveAll();
       }
     } catch (err) {
       console.error('Failed to load multi-year archive folder:', err);
@@ -708,6 +757,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
         file: get().archiveMergedFile,
         selectedArchiveDate: null,
         selectedArchiveFileId: null,
+        activeArchiveRange: null,
+        archiveDateRange: {
+          from: catalog.minDate || '',
+          to: catalog.maxDate || '',
+        },
         dateRange: { start: null, end: null },
         tablePage: 1,
       });
@@ -718,16 +772,36 @@ export const useAppStore = create<AppStore>((set, get) => ({
       set({
         isLoading: true,
         parseProgress: `Aggregating ${catalog.totalFiles} files across ${catalog.availableYears.length} years...`,
+        archiveProcessingStatus: {
+          isProcessing: true,
+          stage: 'Initializing workers...',
+          processed: 0,
+          total: catalog.totalFiles,
+          recordsParsed: 0,
+          failedCount: 0,
+          percentage: 0,
+          errors: [],
+        },
       });
 
-      // Asynchronously aggregate archive files
-      const { mergedFile, parsedFileMap } = await aggregateArchiveFiles(
+      // Asynchronously aggregate archive files in parallel Web Workers
+      const { mergedFile, parsedFileMap, failedFiles } = await aggregateArchiveFiles(
         catalog.files,
         catalog.folderName,
         get().stationMasterMap,
-        (current, total, currentName) => {
+        (progress) => {
           set({
-            parseProgress: `Aggregating ${current} / ${total} files (${currentName})...`,
+            parseProgress: `Aggregating ${progress.processed} / ${progress.total} files (${progress.currentFilename})...`,
+            archiveProcessingStatus: {
+              isProcessing: true,
+              stage: progress.stage,
+              processed: progress.processed,
+              total: progress.total,
+              recordsParsed: progress.recordsParsed,
+              failedCount: progress.failedCount,
+              percentage: progress.percentage,
+              errors: get().archiveProcessingStatus?.errors || [],
+            },
           });
         }
       );
@@ -740,7 +814,22 @@ export const useAppStore = create<AppStore>((set, get) => ({
         parseProgress: '',
         selectedArchiveDate: null,
         selectedArchiveFileId: null,
+        activeArchiveRange: null,
+        archiveDateRange: {
+          from: catalog.minDate || '',
+          to: catalog.maxDate || '',
+        },
         tablePage: 1,
+        archiveProcessingStatus: {
+          isProcessing: false,
+          stage: 'Complete',
+          processed: catalog.totalFiles,
+          total: catalog.totalFiles,
+          recordsParsed: mergedFile.records.length,
+          failedCount: failedFiles.length,
+          percentage: 100,
+          errors: failedFiles,
+        },
       });
     } catch (err) {
       console.error('Failed to aggregate archive files:', err);
@@ -748,6 +837,134 @@ export const useAppStore = create<AppStore>((set, get) => ({
         isLoading: false,
         parseProgress: '',
         error: err instanceof Error ? err.message : 'Failed to aggregate files',
+        archiveProcessingStatus: {
+          isProcessing: false,
+          stage: 'Failed',
+          processed: 0,
+          total: catalog.totalFiles,
+          recordsParsed: 0,
+          failedCount: catalog.totalFiles,
+          percentage: 0,
+          errors: [{ id: 'error', filename: 'archive', error: err instanceof Error ? err.message : String(err) }],
+        },
+      });
+    }
+  },
+
+  selectArchiveRange: async (from: string, to: string) => {
+    const catalog = get().archiveCatalog;
+    if (!catalog) return;
+
+    const normFrom = normalizeIsoDate(from);
+    const normTo = normalizeIsoDate(to);
+
+    const matchingFiles = catalog.files.filter((f) => {
+      if (normFrom && f.dateKey < normFrom) return false;
+      if (normTo && f.dateKey > normTo) return false;
+      return true;
+    });
+
+    if (matchingFiles.length === 0) {
+      set({
+        archiveDateRange: { from: normFrom, to: normTo },
+      });
+      return;
+    }
+
+    if (matchingFiles.length === 1) {
+      set({
+        archiveDateRange: { from: normFrom, to: normTo },
+        activeArchiveRange: null,
+      });
+      await get().loadArchiveFile(matchingFiles[0]);
+      return;
+    }
+
+    if (matchingFiles.length === catalog.files.length && get().archiveMergedFile) {
+      set({
+        file: get().archiveMergedFile,
+        selectedArchiveDate: null,
+        selectedArchiveFileId: null,
+        activeArchiveRange: null,
+        archiveDateRange: {
+          from: catalog.minDate || '',
+          to: catalog.maxDate || '',
+        },
+        tablePage: 1,
+      });
+      return;
+    }
+
+    try {
+      set({
+        isLoading: true,
+        archiveDateRange: { from: normFrom, to: normTo },
+        parseProgress: `Aggregating ${matchingFiles.length} files in date range (${normFrom} to ${normTo})...`,
+        archiveProcessingStatus: {
+          isProcessing: true,
+          stage: `Parsing ${matchingFiles.length} files (${normFrom} to ${normTo})...`,
+          processed: 0,
+          total: matchingFiles.length,
+          recordsParsed: 0,
+          failedCount: 0,
+          percentage: 0,
+          errors: [],
+        },
+      });
+
+      const { mergedFile, parsedFileMap, failedFiles } = await aggregateArchiveFiles(
+        matchingFiles,
+        `${catalog.folderName} (${normFrom} to ${normTo})`,
+        get().stationMasterMap,
+        (progress) => {
+          set({
+            parseProgress: `Aggregating ${progress.processed} / ${progress.total} files (${progress.currentFilename})...`,
+            archiveProcessingStatus: {
+              isProcessing: true,
+              stage: progress.stage,
+              processed: progress.processed,
+              total: progress.total,
+              recordsParsed: progress.recordsParsed,
+              failedCount: progress.failedCount,
+              percentage: progress.percentage,
+              errors: get().archiveProcessingStatus?.errors || [],
+            },
+          });
+        }
+      );
+
+      set({
+        file: mergedFile,
+        parsedArchiveFileMap: new Map([...get().parsedArchiveFileMap, ...parsedFileMap]),
+        isLoading: false,
+        parseProgress: '',
+        selectedArchiveDate: null,
+        selectedArchiveFileId: null,
+        activeArchiveRange: {
+          from: normFrom,
+          to: normTo,
+          count: matchingFiles.length,
+        },
+        archiveDateRange: { from: normFrom, to: normTo },
+        tablePage: 1,
+        archiveProcessingStatus: {
+          isProcessing: false,
+          stage: 'Completed',
+          processed: matchingFiles.length,
+          total: matchingFiles.length,
+          recordsParsed: mergedFile.records.length,
+          failedCount: failedFiles.length,
+          percentage: 100,
+          errors: failedFiles,
+        },
+      });
+    } catch (err) {
+      console.error('Failed to aggregate date range:', err);
+      set({
+        isLoading: false,
+        parseProgress: '',
+        error: err instanceof Error ? err.message : 'Failed to aggregate date range',
+        archiveProcessingStatus: null,
       });
     }
   },
@@ -772,7 +989,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         parseProgress: `Loading ${fileInfo.name}...`,
       });
 
-      // Check cache first
+      // Check cache first for instant 0ms switching
       const cached = get().parsedArchiveFileMap?.get(fileInfo.id);
       if (cached) {
         set({
@@ -809,8 +1026,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
         });
       }
 
-      const decoded = decodeCsdBuffer(buffer);
-      const parsed = parseCsdContent(decoded, fileInfo.name, fileInfo.size, get().stationMasterMap);
+      const parsed = await workerPool.parseSingle(
+        buffer,
+        fileInfo.name,
+        fileInfo.size,
+        get().stationMasterList
+      );
 
       // Save in cache
       get().parsedArchiveFileMap?.set(fileInfo.id, parsed);
@@ -822,6 +1043,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         parseProgress: '',
         selectedArchiveDate: fileInfo.dateKey,
         selectedArchiveFileId: fileInfo.id,
+        activeArchiveRange: null,
         dateRange: { start: null, end: null },
         tablePage: 1,
       });
@@ -850,6 +1072,135 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (nextDate) {
       get().selectArchiveDate(nextDate);
     }
+  },
+
+  getRecordsForExport: async (scope, onProgress) => {
+    const state = get();
+    const catalog = state.archiveCatalog;
+
+    // Case 1: Single file mode or no catalog
+    if (state.activeMode === 'single' || !catalog || catalog.totalFiles === 0) {
+      if (!state.file) {
+        throw new Error('No telemetry data loaded to export.');
+      }
+      const records = scope === 'all_archive' ? state.file.records : selectFilteredRecords(state);
+      return {
+        records,
+        sourceFile: state.file,
+        startDate: state.dateRange.start || state.file.stats.startTime,
+        endDate: state.dateRange.end || state.file.stats.endTime,
+      };
+    }
+
+    // Case 2: Multi-Year Archive Mode - Export All Archive Data
+    if (scope === 'all_archive') {
+      let merged = state.archiveMergedFile;
+      if (!merged) {
+        if (onProgress) {
+          onProgress(5, `Aggregating all ${catalog.totalFiles} files across ${catalog.availableYears.length} years...`);
+        }
+        const { mergedFile, parsedFileMap } = await aggregateArchiveFiles(
+          catalog.files,
+          catalog.folderName,
+          state.stationMasterMap,
+          (p) => {
+            if (onProgress) {
+              onProgress(
+                Math.round(p.percentage * 0.75),
+                `Reading file ${p.processed}/${p.total}: ${p.currentFilename}`
+              );
+            }
+          }
+        );
+        merged = mergedFile;
+        set({
+          archiveMergedFile: mergedFile,
+          parsedArchiveFileMap: parsedFileMap,
+        });
+      }
+      return {
+        records: merged.records,
+        sourceFile: merged,
+        startDate: merged.stats.startTime,
+        endDate: merged.stats.endTime,
+      };
+    }
+
+    // Case 3: Multi-Year Archive Mode - Export Current Filtered Data
+    const normFrom = normalizeIsoDate(state.archiveDateRange.from || '');
+    const normTo = normalizeIsoDate(state.archiveDateRange.to || '');
+    const isMultiDateFilter =
+      (normFrom && normFrom !== (catalog.minDate || '')) ||
+      (normTo && normTo !== (catalog.maxDate || '')) ||
+      state.activeArchiveRange !== null;
+
+    // Subcase 3A: Date range filter is active (and not viewing an explicit single day)
+    if (isMultiDateFilter && state.selectedArchiveDate === null) {
+      const matchingFiles = catalog.files.filter((f) => {
+        if (normFrom && f.dateKey < normFrom) return false;
+        if (normTo && f.dateKey > normTo) return false;
+        return true;
+      });
+
+      let targetFile = state.file;
+      // If current state.file is not the aggregated range for these matching files, aggregate them
+      if (
+        !targetFile ||
+        targetFile === state.archiveMergedFile ||
+        !targetFile.filename.includes(normFrom)
+      ) {
+        if (onProgress) {
+          onProgress(10, `Aggregating ${matchingFiles.length} files in date range (${normFrom} to ${normTo})...`);
+        }
+        const { mergedFile } = await aggregateArchiveFiles(
+          matchingFiles,
+          `${catalog.folderName} (${normFrom} to ${normTo})`,
+          state.stationMasterMap,
+          (p) => {
+            if (onProgress) {
+              onProgress(
+                Math.round(p.percentage * 0.75),
+                `Parsing ${p.processed}/${p.total}: ${p.currentFilename}`
+              );
+            }
+          }
+        );
+        targetFile = mergedFile;
+      }
+
+      const tempState = { ...state, file: targetFile };
+      const filtered = selectFilteredRecords(tempState);
+      return {
+        records: filtered,
+        sourceFile: targetFile,
+        startDate: targetFile.stats.startTime,
+        endDate: targetFile.stats.endTime,
+      };
+    }
+
+    // Subcase 3B: Single file is currently active
+    if (state.selectedArchiveDate !== null && state.file) {
+      const tempState = { ...state, file: state.file };
+      const filtered = selectFilteredRecords(tempState);
+      return {
+        records: filtered,
+        sourceFile: state.file,
+        startDate: state.dateRange.start || state.file.stats.startTime,
+        endDate: state.dateRange.end || state.file.stats.endTime,
+      };
+    }
+
+    // Subcase 3C: Fallback (All dates filtered by station/time)
+    const source = state.archiveMergedFile || state.file;
+    if (!source) throw new Error('No telemetry data available for export');
+    const tempState = { ...state, file: source };
+    const filtered = selectFilteredRecords(tempState);
+    return {
+      records: filtered,
+      sourceFile: source,
+      startDate: state.dateRange.start || source.stats.startTime,
+      endDate: state.dateRange.end || source.stats.endTime,
+    };
   },
 }));
 

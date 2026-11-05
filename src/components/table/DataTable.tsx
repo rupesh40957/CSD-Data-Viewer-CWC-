@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useAppStore, selectFilteredRecords } from '@/store/use-app-store';
 import { formatCsdTimestamp } from '@/lib/parser/timestamp-parser';
 import { computeRecordEngineeringValues, getParameterColor } from '@/lib/insat/compute';
@@ -21,10 +21,408 @@ import {
   TableProperties,
   ListFilter,
   Printer,
+  Radio,
 } from 'lucide-react';
 import { RecordDrawer } from './RecordDrawer';
 import { buildMatrixReportFromRecords } from '@/lib/export/matrix-builder';
 import { MatrixReportModel } from '@/lib/export/types';
+import { useVirtualizer } from '@tanstack/react-virtual';
+
+const MatrixTableRow = React.memo(function MatrixTableRow({
+  ts,
+  rowVals,
+  isEven,
+  stationGroups,
+}: {
+  ts: string;
+  rowVals: (string | number | null)[];
+  isEven: boolean;
+  stationGroups: MatrixReportModel['stationGroups'];
+}) {
+  return (
+    <tr
+      className={`csd-tr ${isEven ? 'csd-tr-even' : 'csd-tr-odd'}`}
+      style={{ height: '30px' }}
+    >
+      <td
+        className="csd-td mono-font"
+        style={{
+          position: 'sticky',
+          left: 0,
+          zIndex: 8,
+          background: isEven ? 'var(--bg-surface)' : 'var(--bg-subtle)',
+          textAlign: 'center',
+          fontWeight: 600,
+          fontSize: '0.74rem',
+          borderRight: '2px solid #64748B',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {ts}
+      </td>
+
+      {stationGroups.flatMap((group) =>
+        group.sensors.map((sensor, sIdx) => {
+          const isLast = sIdx === group.sensors.length - 1;
+          const val = rowVals[sensor.colIndex];
+          const isNumber = typeof val === 'number';
+          const isMissing = val === undefined || val === null || val === '---';
+          const isLock = val === 'Lock';
+          const isUnlock = val === 'Unlock';
+
+          return (
+            <td
+              key={`${group.stationId}-${sensor.name}-${sIdx}`}
+              className="csd-td mono-font"
+              style={{
+                textAlign: isNumber ? 'right' : 'center',
+                fontSize: '0.74rem',
+                fontWeight: isNumber ? 600 : 400,
+                color: isMissing
+                  ? 'var(--text-dim)'
+                  : isNumber
+                  ? 'var(--text-main)'
+                  : isLock
+                  ? '#10b981'
+                  : isUnlock
+                  ? '#f59e0b'
+                  : 'var(--text-main)',
+                borderRight: isLast ? '2px solid #64748B' : '1px solid var(--border)',
+                padding: '4px 8px',
+              }}
+            >
+              {isMissing ? (
+                '---'
+              ) : isNumber ? (
+                Number.isInteger(val) ? val : (val as number).toFixed(sensor.resolution ?? 1)
+              ) : isLock ? (
+                <span className="badge badge-locked" style={{ fontSize: '0.65rem' }}>Lock</span>
+              ) : isUnlock ? (
+                <span className="badge badge-unlocked" style={{ fontSize: '0.65rem' }}>Unlock</span>
+              ) : (
+                String(val)
+              )}
+            </td>
+          );
+        })
+      )}
+    </tr>
+  );
+});
+
+const RecordTableRow = React.memo(function RecordTableRow({
+  record: r,
+  isEven,
+  isSelected,
+  onSelect,
+  stationMasterMap,
+  showEngineeringValues,
+  enabledInsatSensors,
+  insatMSL,
+  showConfigCols,
+}: {
+  record: any;
+  isEven: boolean;
+  isSelected: boolean;
+  onSelect: () => void;
+  stationMasterMap: Map<string, any>;
+  showEngineeringValues: boolean;
+  enabledInsatSensors: any[];
+  insatMSL: number;
+  showConfigCols: boolean;
+}) {
+  const isBad = r.quality === 'Bad';
+  const masterInfo =
+    r.stationMetadata || stationMasterMap.get(r.stationId?.trim().toUpperCase());
+  const stationName = r.stationName || masterInfo?.stationName || null;
+
+  return (
+    <tr
+      onClick={onSelect}
+      className={`csd-tr ${isEven ? 'csd-tr-even' : 'csd-tr-odd'} ${isSelected ? 'selected' : ''} ${isBad ? 'bad-row' : ''}`}
+      style={{
+        borderLeft: isSelected ? '4px solid var(--primary-light)' : '4px solid transparent',
+      }}
+    >
+      {/* Line Number */}
+      <td className="csd-td" style={{ textAlign: 'center' }}>
+        <span className="csd-line-badge">#{r.lineNumber}</span>
+      </td>
+
+      {/* Station Name */}
+      <td className="csd-td">
+        {stationName ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <span style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.81rem' }}>
+              {stationName}
+            </span>
+            {masterInfo?.stateName && (
+              <span style={{ fontSize: '0.67rem', color: 'var(--text-muted)' }}>
+                {masterInfo.district ? `${masterInfo.district}, ` : ''}{masterInfo.stateName}
+              </span>
+            )}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+              Unknown Station
+            </span>
+            <span
+              style={{
+                fontSize: '0.62rem',
+                padding: '1px 5px',
+                borderRadius: '3px',
+                background: 'rgba(234, 179, 8, 0.15)',
+                color: 'var(--quality-corrupt)',
+                border: '1px solid rgba(234, 179, 8, 0.3)',
+                fontWeight: 600,
+              }}
+            >
+              Unmapped
+            </span>
+          </div>
+        )}
+      </td>
+
+      {/* Station ID */}
+      <td className="csd-td" style={{ textAlign: 'center' }}>
+        <span
+          className="mono-font"
+          style={{
+            fontWeight: 700,
+            fontSize: '0.78rem',
+            color: isBad ? 'var(--quality-bad)' : 'var(--primary-light)',
+            background: isBad ? 'rgba(239, 68, 68, 0.08)' : 'rgba(56, 189, 248, 0.08)',
+            padding: '2px 7px',
+            borderRadius: '4px',
+            border: isBad ? '1px solid rgba(239, 68, 68, 0.25)' : '1px solid rgba(56, 189, 248, 0.25)',
+            display: 'inline-block',
+            letterSpacing: '0.04em',
+          }}
+        >
+          {r.stationId}
+        </span>
+      </td>
+
+      {/* Timestamp IST */}
+      <td className="csd-td">
+        <span
+          className="mono-font"
+          style={{
+            color: 'var(--text-main)',
+            fontSize: '0.74rem',
+            whiteSpace: 'nowrap',
+            letterSpacing: '0.02em',
+          }}
+        >
+          {formatCsdTimestamp(r.timestamp, true)}
+        </span>
+      </td>
+
+      {/* Time Offset */}
+      <td className="csd-td" style={{ textAlign: 'center' }}>
+        <span
+          className="mono-font"
+          style={{
+            color: 'var(--text-muted)',
+            fontSize: '0.73rem',
+          }}
+        >
+          {r.timeOffset}
+        </span>
+      </td>
+
+      {/* Status Mode */}
+      <td className="csd-td" style={{ textAlign: 'center' }}>
+        {r.status === 'L' && <span className="badge badge-locked">L</span>}
+        {r.status === 'U' && <span className="badge badge-unlocked">U</span>}
+        {r.status === '$' && <span className="badge badge-corrupt">$</span>}
+      </td>
+
+      {/* Quality */}
+      <td className="csd-td" style={{ textAlign: 'center' }}>
+        {r.quality === 'Good' ? (
+          <span className="badge badge-good">Good</span>
+        ) : (
+          <span className="badge badge-bad" title={r.errors?.join('; ') || ''}>
+            Bad
+          </span>
+        )}
+      </td>
+
+      {/* INSAT Engineering Value Cells */}
+      {showEngineeringValues && (() => {
+        const engValues = computeRecordEngineeringValues(enabledInsatSensors, r, insatMSL);
+        return enabledInsatSensors.map((sensor) => {
+          const ev = engValues[sensor.sensorName];
+          if (!ev) return (
+            <td
+              key={sensor.sensorName}
+              className="csd-td csd-td-eng"
+              style={{
+                textAlign: 'right',
+                fontFamily: 'var(--font-mono)',
+                color: 'var(--text-dim)',
+              }}
+            >
+              —
+            </td>
+          );
+          return (
+            <td
+              key={sensor.sensorName}
+              className="csd-td csd-td-eng"
+              style={{
+                textAlign: 'right',
+                fontFamily: 'var(--font-mono)',
+                fontWeight: ev.isValid ? 700 : 400,
+                fontSize: '0.78rem',
+                color: getParameterColor(sensor.sensorName, ev.value),
+              }}
+              title={
+                ev.isValid
+                  ? `Raw: ${ev.rawInputs?.join(', ') || ''} | Eq: ${sensor.equationDisplay}`
+                  : 'Missing or corrupt input'
+              }
+            >
+              {ev.displayValue}
+            </td>
+          );
+        });
+      })()}
+
+      {/* Config c1, c2, c3, H */}
+      {showConfigCols && (
+        <>
+          <td
+            className="csd-td"
+            style={{
+              textAlign: 'center',
+              fontFamily: 'var(--font-mono)',
+              color: r.c1 === null ? 'var(--quality-bad)' : 'var(--text-muted)',
+              fontSize: '0.73rem',
+            }}
+          >
+            {r.c1 === null ? '$$' : r.c1}
+          </td>
+          <td
+            className="csd-td"
+            style={{
+              textAlign: 'center',
+              fontFamily: 'var(--font-mono)',
+              color: r.c2 === null ? 'var(--quality-bad)' : 'var(--text-muted)',
+              fontSize: '0.73rem',
+            }}
+          >
+            {r.c2 === null ? '$$' : r.c2}
+          </td>
+          <td
+            className="csd-td"
+            style={{
+              textAlign: 'center',
+              fontFamily: 'var(--font-mono)',
+              color: r.c3 === null ? 'var(--quality-bad)' : 'var(--text-muted)',
+              fontSize: '0.73rem',
+            }}
+          >
+            {r.c3 === null ? '$$' : r.c3}
+          </td>
+          <td
+            className="csd-td"
+            style={{
+              textAlign: 'center',
+              fontFamily: 'var(--font-mono)',
+              fontWeight: 600,
+              color: r.h ? 'var(--text-main)' : 'var(--quality-bad)',
+              fontSize: '0.73rem',
+            }}
+          >
+            {r.h ? `H:${r.h}` : 'H:$$'}
+          </td>
+        </>
+      )}
+
+      {/* s16 Composite float */}
+      <td className="csd-td" style={{ textAlign: 'right' }}>
+        <span
+          className="mono-font"
+          style={{
+            fontWeight: 700,
+            fontSize: '0.75rem',
+            color:
+              r.s16 === null
+                ? 'var(--quality-bad)'
+                : r.s16 > 0
+                ? 'var(--primary-light)'
+                : 'var(--text-muted)',
+          }}
+        >
+          {r.s16 === null ? '$$' : r.s16.toFixed(3)}
+        </span>
+      </td>
+
+      {/* s17 */}
+      <td
+        className="csd-td"
+        style={{
+          textAlign: 'center',
+          fontFamily: 'var(--font-mono)',
+          color: r.s17 === null ? 'var(--quality-bad)' : 'var(--text-muted)',
+          fontSize: '0.73rem',
+        }}
+      >
+        {r.s17 === null ? '$$' : r.s17}
+      </td>
+
+      {/* Sensor Array / Active Telemetry */}
+      <td className="csd-td">
+        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', maxWidth: '340px' }}>
+          {r.sensors?.map((s: any, sIdx: number) => {
+            const isDollar = s.value === null;
+            return (
+              <span
+                key={sIdx}
+                style={{
+                  fontSize: '0.67rem',
+                  padding: '1px 5px',
+                  borderRadius: '3px',
+                  background: isDollar
+                    ? 'var(--quality-bad-bg)'
+                    : 'rgba(148, 163, 184, 0.08)',
+                  border: isDollar
+                    ? '1px solid rgba(239, 68, 68, 0.35)'
+                    : '1px solid var(--table-border-subtle)',
+                  color: isDollar ? 'var(--quality-bad)' : 'var(--text-muted)',
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >
+                {s.key}:{isDollar ? '$$' : s.value}
+              </span>
+            );
+          })}
+        </div>
+      </td>
+
+      {/* Signal Code */}
+      <td className="csd-td" style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+        <span
+          className="mono-font"
+          style={{
+            fontSize: '0.72rem',
+            color: r.signal?.signalType === 'NN' ? 'var(--quality-bad)' : 'var(--text-dim)',
+            background: 'rgba(148, 163, 184, 0.06)',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            border: '1px solid var(--table-border-subtle)',
+            display: 'inline-block',
+          }}
+        >
+          {r.signal?.raw}
+        </span>
+      </td>
+    </tr>
+  );
+});
 
 export function DataTable() {
   const {
@@ -67,21 +465,83 @@ export function DataTable() {
   const [matrixPage, setMatrixPage] = useState(1);
   const [matrixPageSize, setMatrixPageSize] = useState(50);
 
-  const hasActiveFilter = selectedStations.length > 0 || dateRange?.start !== null || dateRange?.end !== null;
-  const matrixModel: MatrixReportModel | null = useMemo(() => {
-    if (!file) return null;
-    if ((file as any).matrixModel && !hasActiveFilter) {
-      return (file as any).matrixModel;
+  // Discover unique stations available in current records/dataset
+  const allAvailableStations = useMemo(() => {
+    if (!file) return [];
+    if (file.stations && file.stations.length > 0) {
+      return file.stations.map((s) => ({
+        stationId: s.stationId,
+        stationName: s.stationName || s.stationId,
+      }));
     }
+    const map = new Map<string, string>();
+    for (let i = 0; i < records.length; i++) {
+      const r = records[i];
+      const id = (r.stationId || '').trim().toUpperCase();
+      if (!map.has(id)) {
+        map.set(id, r.stationName || id);
+      }
+    }
+    return Array.from(map.entries()).map(([stationId, stationName]) => ({
+      stationId,
+      stationName,
+    }));
+  }, [file, records]);
+
+  // Filter stations based on selectedStations and search query
+  const filteredStations = useMemo(() => {
+    let list = allAvailableStations;
+    if (selectedStations.length > 0) {
+      const selectedSet = new Set(selectedStations.map((s) => s.toUpperCase()));
+      list = list.filter((s) => selectedSet.has(s.stationId.toUpperCase()));
+    }
+    const q = searchQuery.toLowerCase().trim();
+    if (q) {
+      list = list.filter(
+        (s) =>
+          s.stationId.toLowerCase().includes(q) ||
+          (s.stationName && s.stationName.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [allAvailableStations, selectedStations, searchQuery]);
+
+  // Station Pagination State for Matrix View (prevents 5,467-column browser crash)
+  const [matrixStationPage, setMatrixStationPage] = useState(1);
+  const [matrixStationsPerPage, setMatrixStationsPerPage] = useState(20);
+
+  // Reset station page to 1 when search or station filter changes
+  useEffect(() => {
+    setMatrixStationPage(1);
+  }, [searchQuery, selectedStations]);
+
+  const totalStationCount = filteredStations.length;
+  const totalStationPages = Math.ceil(totalStationCount / matrixStationsPerPage) || 1;
+  const currentStationPage = Math.min(Math.max(1, matrixStationPage), totalStationPages);
+
+  const visibleStations = useMemo(() => {
+    if (matrixStationsPerPage <= 0 || matrixStationsPerPage >= totalStationCount) {
+      return filteredStations;
+    }
+    const start = (currentStationPage - 1) * matrixStationsPerPage;
+    return filteredStations.slice(start, start + matrixStationsPerPage);
+  }, [filteredStations, currentStationPage, matrixStationsPerPage, totalStationCount]);
+
+  const visibleStationIds = useMemo(() => {
+    return visibleStations.map((s) => s.stationId);
+  }, [visibleStations]);
+
+  const matrixModel: MatrixReportModel | null = useMemo(() => {
+    if (!file || viewMode !== 'matrix' || visibleStationIds.length === 0) return null;
     return buildMatrixReportFromRecords(
       records,
       insatSensors,
       insatMSL,
-      selectedStations,
+      visibleStationIds,
       dateRange?.start,
       dateRange?.end
     );
-  }, [file, records, insatSensors, insatMSL, selectedStations, dateRange, hasActiveFilter]);
+  }, [file, viewMode, records, insatSensors, insatMSL, visibleStationIds, dateRange]);
 
   const paginatedTimestamps = useMemo(() => {
     if (!matrixModel) return [];
@@ -114,6 +574,22 @@ export function DataTable() {
     count += 4; // s16, s17, sensors, signal
     return count;
   }, [showEngineeringValues, enabledInsatSensors.length, showConfigCols]);
+
+  const matrixScrollRef = useRef<HTMLDivElement>(null);
+  const matrixRowVirtualizer = useVirtualizer({
+    count: paginatedTimestamps.length,
+    getScrollElement: () => matrixScrollRef.current,
+    estimateSize: () => 30,
+    overscan: 10,
+  });
+
+  const recordsScrollRef = useRef<HTMLDivElement>(null);
+  const recordRowVirtualizer = useVirtualizer({
+    count: paginatedRecords.length,
+    getScrollElement: () => recordsScrollRef.current,
+    estimateSize: () => 44,
+    overscan: 10,
+  });
 
   if (!file) {
     if (archiveCatalog && archiveCatalog.totalFiles > 0) {
@@ -277,7 +753,7 @@ export function DataTable() {
                 fontWeight: 600,
               }}
             >
-              {matrixModel ? `${matrixModel.stationGroups.length} Stations` : 'Matrix'}
+              {totalStationCount > 0 ? `${totalStationCount} Stations` : 'Matrix'}
             </span>
           </button>
 
@@ -500,7 +976,7 @@ export function DataTable() {
                 }}
                 title="Clear station filter"
               >
-                ×
+                Ã—
               </button>
             </div>
           )}
@@ -654,8 +1130,112 @@ export function DataTable() {
             </div>
           </div>
 
+          {/* Station Windowing / Horizontal Pagination Toolbar */}
+          {totalStationCount > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '8px 16px',
+                background: 'var(--bg-subtle)',
+                borderBottom: '1px solid var(--border)',
+                flexWrap: 'wrap',
+                gap: '10px',
+                fontSize: '0.78rem',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  Viewing Stations{' '}
+                  <strong style={{ color: 'var(--text-main)' }}>
+                    {(currentStationPage - 1) * matrixStationsPerPage + 1}–
+                    {Math.min(currentStationPage * matrixStationsPerPage, totalStationCount)}
+                  </strong>{' '}
+                  of <strong style={{ color: 'var(--primary-light)' }}>{totalStationCount}</strong>
+                </span>
+                {totalStationPages > 1 && (
+                  <span
+                    style={{
+                      fontSize: '0.68rem',
+                      background: 'rgba(56, 189, 248, 0.12)',
+                      color: 'var(--primary-light)',
+                      padding: '2px 8px',
+                      borderRadius: '10px',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Station Set {currentStationPage} of {totalStationPages}
+                  </span>
+                )}
+                {searchQuery.trim() && (
+                  <span
+                    style={{
+                      fontSize: '0.68rem',
+                      background: 'rgba(234, 179, 8, 0.15)',
+                      color: '#eab308',
+                      padding: '2px 8px',
+                      borderRadius: '10px',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Filter: &quot;{searchQuery}&quot;
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {totalStationPages > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <button
+                      onClick={() => setMatrixStationPage((p) => Math.max(1, p - 1))}
+                      disabled={currentStationPage <= 1}
+                      className="btn-secondary"
+                      style={{ padding: '3px 8px', fontSize: '0.74rem' }}
+                      title="Previous Stations"
+                    >
+                      <ChevronLeft size={13} />
+                      <span>Prev Stations</span>
+                    </button>
+                    <span style={{ fontSize: '0.74rem', padding: '0 4px', color: 'var(--text-muted)' }}>
+                      Set {currentStationPage}/{totalStationPages}
+                    </span>
+                    <button
+                      onClick={() => setMatrixStationPage((p) => Math.min(totalStationPages, p + 1))}
+                      disabled={currentStationPage >= totalStationPages}
+                      className="btn-secondary"
+                      style={{ padding: '3px 8px', fontSize: '0.74rem' }}
+                      title="Next Stations"
+                    >
+                      <span>Next Stations</span>
+                      <ChevronRight size={13} />
+                    </button>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>View:</span>
+                  <select
+                    value={matrixStationsPerPage}
+                    onChange={(e) => {
+                      setMatrixStationsPerPage(Number(e.target.value));
+                      setMatrixStationPage(1);
+                    }}
+                    className="csd-select"
+                    style={{ padding: '3px 6px', fontSize: '0.74rem' }}
+                  >
+                    <option value={10}>10 Stations</option>
+                    <option value={20}>20 Stations</option>
+                    <option value={30}>30 Stations</option>
+                    <option value={50}>50 Stations</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Matrix Scrollable Grid */}
-          <div className="csd-table-scroll-container" style={{ maxHeight: '72vh', overflow: 'auto' }}>
+          <div ref={matrixScrollRef} className="csd-table-scroll-container" style={{ maxHeight: '72vh', overflow: 'auto' }}>
             <table className={`csd-grid-table ${highContrastGrid ? 'high-contrast' : ''}`} style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
               <thead>
                 {/* Header Row 1: Station Names (Merged) */}
@@ -738,82 +1318,50 @@ export function DataTable() {
                 </tr>
               </thead>
               <tbody>
-                {paginatedTimestamps.map((ts, rowIdx) => {
-                  const rowVals = matrixModel.grid.get(ts) || [ts];
-                  const isEven = rowIdx % 2 === 0;
-                  return (
-                    <tr
-                      key={ts}
-                      className={`csd-tr ${isEven ? 'csd-tr-even' : 'csd-tr-odd'}`}
-                      style={{ height: '30px' }}
-                    >
-                      {/* Sticky Col 0: Timestamp */}
+                {matrixRowVirtualizer.getVirtualItems().length > 0 &&
+                  matrixRowVirtualizer.getVirtualItems()[0].start > 0 && (
+                    <tr>
                       <td
-                        className="csd-td mono-font"
+                        colSpan={matrixModel.totalColumns}
                         style={{
-                          position: 'sticky',
-                          left: 0,
-                          zIndex: 8,
-                          background: isEven ? 'var(--bg-surface)' : 'var(--bg-subtle)',
-                          textAlign: 'center',
-                          fontWeight: 600,
-                          fontSize: '0.74rem',
-                          borderRight: '2px solid #64748B',
-                          whiteSpace: 'nowrap',
+                          height: `${matrixRowVirtualizer.getVirtualItems()[0].start}px`,
+                          padding: 0,
+                          border: 0,
                         }}
-                      >
-                        {ts}
-                      </td>
-
-                      {/* Station Data Cells */}
-                      {matrixModel.stationGroups.flatMap((group) =>
-                        group.sensors.map((sensor, sIdx) => {
-                          const isLast = sIdx === group.sensors.length - 1;
-                          const val = rowVals[sensor.colIndex];
-                          const isNumber = typeof val === 'number';
-                          const isMissing = val === undefined || val === null || val === '---';
-                          const isLock = val === 'Lock';
-                          const isUnlock = val === 'Unlock';
-
-                          return (
-                            <td
-                              key={`${group.stationId}-${sensor.name}-${sIdx}`}
-                              className="csd-td mono-font"
-                              style={{
-                                textAlign: isNumber ? 'right' : 'center',
-                                fontSize: '0.74rem',
-                                fontWeight: isNumber ? 600 : 400,
-                                color: isMissing
-                                  ? 'var(--text-dim)'
-                                  : isNumber
-                                  ? 'var(--text-main)'
-                                  : isLock
-                                  ? '#10b981'
-                                  : isUnlock
-                                  ? '#f59e0b'
-                                  : 'var(--text-main)',
-                                borderRight: isLast ? '2px solid #64748B' : '1px solid var(--border)',
-                                padding: '4px 8px',
-                              }}
-                            >
-                              {isMissing ? (
-                                '---'
-                              ) : isNumber ? (
-                                Number.isInteger(val) ? val : (val as number).toFixed(sensor.resolution ?? 1)
-                              ) : isLock ? (
-                                <span className="badge badge-locked" style={{ fontSize: '0.65rem' }}>Lock</span>
-                              ) : isUnlock ? (
-                                <span className="badge badge-unlocked" style={{ fontSize: '0.65rem' }}>Unlock</span>
-                              ) : (
-                                String(val)
-                              )}
-                            </td>
-                          );
-                        })
-                      )}
+                      />
                     </tr>
+                  )}
+                {matrixRowVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const ts = paginatedTimestamps[virtualRow.index];
+                  const rowVals = matrixModel.grid.get(ts) || [ts];
+                  const isEven = virtualRow.index % 2 === 0;
+                  return (
+                    <MatrixTableRow
+                      key={ts}
+                      ts={ts}
+                      rowVals={rowVals}
+                      isEven={isEven}
+                      stationGroups={matrixModel.stationGroups}
+                    />
                   );
                 })}
+                {matrixRowVirtualizer.getVirtualItems().length > 0 && (
+                  <tr>
+                    <td
+                      colSpan={matrixModel.totalColumns}
+                      style={{
+                        height: `${
+                          matrixRowVirtualizer.getTotalSize() -
+                          matrixRowVirtualizer.getVirtualItems()[
+                            matrixRowVirtualizer.getVirtualItems().length - 1
+                          ].end
+                        }px`,
+                        padding: 0,
+                        border: 0,
+                      }}
+                    />
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -834,7 +1382,7 @@ export function DataTable() {
             <span style={{ color: 'var(--text-muted)' }}>
               Showing intervals {(matrixPage - 1) * matrixPageSize + 1} to{' '}
               {Math.min(matrixPage * matrixPageSize, matrixModel.timestamps.length)} of{' '}
-              {matrixModel.timestamps.length} hourly readings across {matrixModel.stationGroups.length} stations
+              {matrixModel.timestamps.length} hourly readings across {matrixModel.stationGroups.length} stations ({totalStationCount} total in archive)
             </span>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -866,7 +1414,7 @@ export function DataTable() {
       {viewMode === 'records' && (
       <div className="csd-table-card">
         {/* Scrollable Grid Container */}
-        <div className="csd-table-scroll-container">
+        <div ref={recordsScrollRef} className="csd-table-scroll-container">
           <table className={`csd-grid-table ${highContrastGrid ? 'high-contrast' : ''}`}>
             <thead>
               <tr>
@@ -892,7 +1440,7 @@ export function DataTable() {
                   Quality
                 </th>
 
-                {/* INSAT Engineering Value Columns — prominent accent header */}
+                {/* INSAT Engineering Value Columns â€” prominent accent header */}
                 {showEngineeringValues && enabledInsatSensors.map((sensor) => (
                   <th
                     key={sensor.sensorName}
@@ -970,301 +1518,56 @@ export function DataTable() {
                   </td>
                 </tr>
               ) : (
-                paginatedRecords.map((r, rowIdx) => {
-                  const isBad = r.quality === 'Bad';
-                  const isSelected = selectedRecordId === r.id;
-                  const isEven = rowIdx % 2 === 0;
-                  const masterInfo =
-                    r.stationMetadata || stationMasterMap.get(r.stationId.trim().toUpperCase());
-                  const stationName = r.stationName || masterInfo?.stationName || null;
-                  return (
-                    <tr
-                      key={r.id}
-                      onClick={() => setSelectedRecordId(isSelected ? null : r.id)}
-                      className={`csd-tr ${isEven ? 'csd-tr-even' : 'csd-tr-odd'} ${isSelected ? 'selected' : ''} ${isBad ? 'bad-row' : ''}`}
-                      style={{
-                        borderLeft: isSelected ? '4px solid var(--primary-light)' : '4px solid transparent',
-                      }}
-                    >
-                      {/* Line Number */}
-                      <td className="csd-td" style={{ textAlign: 'center' }}>
-                        <span className="csd-line-badge">#{r.lineNumber}</span>
-                      </td>
-
-                      {/* Station Name */}
-                      <td className="csd-td">
-                        {stationName ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.81rem' }}>
-                              {stationName}
-                            </span>
-                            {masterInfo?.stateName && (
-                              <span style={{ fontSize: '0.67rem', color: 'var(--text-muted)' }}>
-                                {masterInfo.district ? `${masterInfo.district}, ` : ''}{masterInfo.stateName}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontStyle: 'italic', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                              Unknown Station
-                            </span>
-                            <span
-                              style={{
-                                fontSize: '0.62rem',
-                                padding: '1px 5px',
-                                borderRadius: '3px',
-                                background: 'rgba(234, 179, 8, 0.15)',
-                                color: 'var(--quality-corrupt)',
-                                border: '1px solid rgba(234, 179, 8, 0.3)',
-                                fontWeight: 600,
-                              }}
-                            >
-                              Unmapped
-                            </span>
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Station ID */}
-                      <td className="csd-td" style={{ textAlign: 'center' }}>
-                        <span
-                          className="mono-font"
+                <>
+                  {recordRowVirtualizer.getVirtualItems().length > 0 &&
+                    recordRowVirtualizer.getVirtualItems()[0].start > 0 && (
+                      <tr>
+                        <td
+                          colSpan={totalColumnCount}
                           style={{
-                            fontWeight: 700,
-                            fontSize: '0.78rem',
-                            color: isBad ? 'var(--quality-bad)' : 'var(--primary-light)',
-                            background: isBad ? 'rgba(239, 68, 68, 0.08)' : 'rgba(56, 189, 248, 0.08)',
-                            padding: '2px 7px',
-                            borderRadius: '4px',
-                            border: isBad ? '1px solid rgba(239, 68, 68, 0.25)' : '1px solid rgba(56, 189, 248, 0.25)',
-                            display: 'inline-block',
-                            letterSpacing: '0.04em',
+                            height: `${recordRowVirtualizer.getVirtualItems()[0].start}px`,
+                            padding: 0,
+                            border: 0,
                           }}
-                        >
-                          {r.stationId}
-                        </span>
-                      </td>
-
-                      {/* Timestamp IST */}
-                      <td className="csd-td">
-                        <span
-                          className="mono-font"
-                          style={{
-                            color: 'var(--text-main)',
-                            fontSize: '0.74rem',
-                            whiteSpace: 'nowrap',
-                            letterSpacing: '0.02em',
-                          }}
-                        >
-                          {formatCsdTimestamp(r.timestamp, true)}
-                        </span>
-                      </td>
-
-                      {/* Time Offset */}
-                      <td className="csd-td" style={{ textAlign: 'center' }}>
-                        <span
-                          className="mono-font"
-                          style={{
-                            color: 'var(--text-muted)',
-                            fontSize: '0.73rem',
-                          }}
-                        >
-                          {r.timeOffset}
-                        </span>
-                      </td>
-
-                      {/* Status Mode */}
-                      <td className="csd-td" style={{ textAlign: 'center' }}>
-                        {r.status === 'L' && <span className="badge badge-locked">L</span>}
-                        {r.status === 'U' && <span className="badge badge-unlocked">U</span>}
-                        {r.status === '$' && <span className="badge badge-corrupt">$</span>}
-                      </td>
-
-                      {/* Quality */}
-                      <td className="csd-td" style={{ textAlign: 'center' }}>
-                        {r.quality === 'Good' ? (
-                          <span className="badge badge-good">Good</span>
-                        ) : (
-                          <span className="badge badge-bad" title={r.errors.join('; ')}>
-                            Bad
-                          </span>
-                        )}
-                      </td>
-
-                      {/* INSAT Engineering Value Cells — with clear parameter colors */}
-                      {showEngineeringValues && (() => {
-                        const engValues = computeRecordEngineeringValues(enabledInsatSensors, r, insatMSL);
-                        return enabledInsatSensors.map((sensor) => {
-                          const ev = engValues[sensor.sensorName];
-                          if (!ev) return (
-                            <td
-                              key={sensor.sensorName}
-                              className="csd-td csd-td-eng"
-                              style={{
-                                textAlign: 'right',
-                                fontFamily: 'var(--font-mono)',
-                                color: 'var(--text-dim)',
-                              }}
-                            >
-                              —
-                            </td>
-                          );
-                          return (
-                            <td
-                              key={sensor.sensorName}
-                              className="csd-td csd-td-eng"
-                              style={{
-                                textAlign: 'right',
-                                fontFamily: 'var(--font-mono)',
-                                fontWeight: ev.isValid ? 700 : 400,
-                                fontSize: '0.78rem',
-                                color: getParameterColor(sensor.sensorName, ev.value),
-                              }}
-                              title={
-                                ev.isValid
-                                  ? `Raw: ${ev.rawInputs.join(', ')} | Eq: ${sensor.equationDisplay}`
-                                  : 'Missing or corrupt input'
-                              }
-                            >
-                              {ev.displayValue}
-                            </td>
-                          );
-                        });
-                      })()}
-
-                      {/* Config c1, c2, c3, H */}
-                      {showConfigCols && (
-                        <>
-                          <td
-                            className="csd-td"
-                            style={{
-                              textAlign: 'center',
-                              fontFamily: 'var(--font-mono)',
-                              color: r.c1 === null ? 'var(--quality-bad)' : 'var(--text-muted)',
-                              fontSize: '0.73rem',
-                            }}
-                          >
-                            {r.c1 === null ? '$$' : r.c1}
-                          </td>
-                          <td
-                            className="csd-td"
-                            style={{
-                              textAlign: 'center',
-                              fontFamily: 'var(--font-mono)',
-                              color: r.c2 === null ? 'var(--quality-bad)' : 'var(--text-muted)',
-                              fontSize: '0.73rem',
-                            }}
-                          >
-                            {r.c2 === null ? '$$' : r.c2}
-                          </td>
-                          <td
-                            className="csd-td"
-                            style={{
-                              textAlign: 'center',
-                              fontFamily: 'var(--font-mono)',
-                              color: r.c3 === null ? 'var(--quality-bad)' : 'var(--text-muted)',
-                              fontSize: '0.73rem',
-                            }}
-                          >
-                            {r.c3 === null ? '$$' : r.c3}
-                          </td>
-                          <td
-                            className="csd-td"
-                            style={{
-                              textAlign: 'center',
-                              fontFamily: 'var(--font-mono)',
-                              fontWeight: 600,
-                              color: r.h ? 'var(--text-main)' : 'var(--quality-bad)',
-                              fontSize: '0.73rem',
-                            }}
-                          >
-                            {r.h ? `H:${r.h}` : 'H:$$'}
-                          </td>
-                        </>
-                      )}
-
-                      {/* s16 Composite float */}
-                      <td className="csd-td" style={{ textAlign: 'right' }}>
-                        <span
-                          className="mono-font"
-                          style={{
-                            fontWeight: 700,
-                            fontSize: '0.75rem',
-                            color:
-                              r.s16 === null
-                                ? 'var(--quality-bad)'
-                                : r.s16 > 0
-                                ? 'var(--primary-light)'
-                                : 'var(--text-muted)',
-                          }}
-                        >
-                          {r.s16 === null ? '$$' : r.s16.toFixed(3)}
-                        </span>
-                      </td>
-
-                      {/* s17 */}
+                        />
+                      </tr>
+                    )}
+                  {recordRowVirtualizer.getVirtualItems().map((virtualRow) => {
+                    const r = paginatedRecords[virtualRow.index];
+                    const isEven = virtualRow.index % 2 === 0;
+                    return (
+                      <RecordTableRow
+                        key={r.id}
+                        record={r}
+                        isEven={isEven}
+                        isSelected={selectedRecordId === r.id}
+                        onSelect={() => setSelectedRecordId(selectedRecordId === r.id ? null : r.id)}
+                        stationMasterMap={stationMasterMap}
+                        showEngineeringValues={showEngineeringValues}
+                        enabledInsatSensors={enabledInsatSensors}
+                        insatMSL={insatMSL}
+                        showConfigCols={showConfigCols}
+                      />
+                    );
+                  })}
+                  {recordRowVirtualizer.getVirtualItems().length > 0 && (
+                    <tr>
                       <td
-                        className="csd-td"
+                        colSpan={totalColumnCount}
                         style={{
-                          textAlign: 'center',
-                          fontFamily: 'var(--font-mono)',
-                          color: r.s17 === null ? 'var(--quality-bad)' : 'var(--text-muted)',
-                          fontSize: '0.73rem',
+                          height: `${
+                            recordRowVirtualizer.getTotalSize() -
+                            recordRowVirtualizer.getVirtualItems()[
+                              recordRowVirtualizer.getVirtualItems().length - 1
+                            ].end
+                          }px`,
+                          padding: 0,
+                          border: 0,
                         }}
-                      >
-                        {r.s17 === null ? '$$' : r.s17}
-                      </td>
-
-                      {/* Sensor Array / Active Telemetry */}
-                      <td className="csd-td">
-                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', maxWidth: '340px' }}>
-                          {r.sensors.map((s, sIdx) => {
-                            const isDollar = s.value === null;
-                            return (
-                              <span
-                                key={sIdx}
-                                style={{
-                                  fontSize: '0.67rem',
-                                  padding: '1px 5px',
-                                  borderRadius: '3px',
-                                  background: isDollar
-                                    ? 'var(--quality-bad-bg)'
-                                    : 'rgba(148, 163, 184, 0.08)',
-                                  border: isDollar
-                                    ? '1px solid rgba(239, 68, 68, 0.35)'
-                                    : '1px solid var(--table-border-subtle)',
-                                  color: isDollar ? 'var(--quality-bad)' : 'var(--text-muted)',
-                                  fontFamily: 'var(--font-mono)',
-                                }}
-                              >
-                                {s.key}:{isDollar ? '$$' : s.value}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </td>
-
-                      {/* Signal Code */}
-                      <td className="csd-td" style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                        <span
-                          className="mono-font"
-                          style={{
-                            fontSize: '0.72rem',
-                            color: r.signal.signalType === 'NN' ? 'var(--quality-bad)' : 'var(--text-dim)',
-                            background: 'rgba(148, 163, 184, 0.06)',
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            border: '1px solid var(--table-border-subtle)',
-                            display: 'inline-block',
-                          }}
-                        >
-                          {r.signal.raw}
-                        </span>
-                      </td>
+                      />
                     </tr>
-                  );
-                })
+                  )}
+                </>
               )}
             </tbody>
           </table>

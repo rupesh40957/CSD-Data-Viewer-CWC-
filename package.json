@@ -9,6 +9,7 @@
     "lint": "next lint",
     "test:parser": "tsx scripts/test-parser.ts",
     "test:export": "tsx scripts/verify-cwc-exports.ts",
+    "test:range": "tsx scripts/test-date-range.ts",
     "inspect:parser": "tsx scripts/inspect-csd.ts"
   },
   "dependencies": {

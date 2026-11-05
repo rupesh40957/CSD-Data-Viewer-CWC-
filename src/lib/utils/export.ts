@@ -1,6 +1,8 @@
 /**
  * Central Export Utility for CWC Data Viewer
  * Orchestrates professional Excel (.xlsx) and CSV (.csv) exports
+ * with dual-mode data scope (All Archive Data vs Filtered Data),
+ * chunked streaming generation, progress tracking, and zero truncation.
  */
 
 import { CsdRecord } from '@/types/csd';
@@ -15,10 +17,14 @@ import {
   createFlatExcelWorkbook,
   downloadExcelWorkbook,
 } from '../export/exceljs-export';
+import { exportFlatRecordsSheetJs } from '../export/sheetjs-export';
 import {
   generateMatrixCsv,
   generateFlattenedMatrixCsv,
+  generateMatrixCsvBlob,
+  generateFlattenedMatrixCsvBlob,
   generateFlatRecordsCsv,
+  createStreamingCsvBlob,
   downloadCsvWithBom,
 } from '../export/csv-export';
 import {
@@ -166,30 +172,57 @@ export async function exportToExcel(
   existingMatrixModel?: MatrixReportModel | null,
   dateStart?: Date | null,
   dateEnd?: Date | null,
-  filterStations?: string[]
+  filterStations?: string[],
+  onProgress?: (pct: number, stage: string) => void
 ): Promise<void> {
+  if (onProgress) onProgress(10, 'Building Excel model...');
+
   let workbook;
 
   if (mode === 'matrix') {
-    // If active station/date filters are present, rebuild matrix dynamically to reflect filtered scope
     const hasActiveFilters = Boolean((filterStations && filterStations.length > 0) || dateStart || dateEnd);
     const model =
       !hasActiveFilters && existingMatrixModel
         ? existingMatrixModel
         : buildMatrixReportFromRecords(records, insatSensors, insatMSL, filterStations, dateStart, dateEnd);
-    workbook = createMatrixExcelWorkbook(model);
+
+    if (onProgress) onProgress(40, 'Formatting matrix worksheet styling & headers...');
+    await new Promise((r) => setTimeout(r, 0));
+
+    workbook = await createMatrixExcelWorkbook(model, onProgress);
   } else {
-    // Flat Mode
+    // For large datasets (> 25,000 records), use high-performance SheetJS to prevent V8 memory crashes
+    if (records.length > 25000) {
+      await exportFlatRecordsSheetJs(
+        records,
+        filename,
+        sections,
+        insatSensors,
+        insatMSL,
+        onProgress
+      );
+      if (onProgress) onProgress(100, 'Excel export complete');
+      return;
+    }
+
+    if (onProgress) onProgress(40, `Formatting ${records.length} records for Excel...`);
+    await new Promise((r) => setTimeout(r, 0));
+
     workbook = createFlatExcelWorkbook(records, sections, insatSensors, insatMSL);
   }
 
+  if (onProgress) onProgress(80, 'Writing Excel binary buffer...');
+  await new Promise((r) => setTimeout(r, 0));
+
   await downloadExcelWorkbook(workbook, filename);
+
+  if (onProgress) onProgress(100, 'Excel export complete');
 }
 
 /**
  * Export records as CSV (.csv) file download with UTF-8 BOM
  */
-export function exportToCsv(
+export async function exportToCsv(
   records: CsdRecord[],
   filename: string = 'telemetry_export.csv',
   sections: ExportSections = DEFAULT_EXPORT_SECTIONS,
@@ -200,9 +233,10 @@ export function exportToCsv(
   existingMatrixModel?: MatrixReportModel | null,
   dateStart?: Date | null,
   dateEnd?: Date | null,
-  filterStations?: string[]
-): void {
-  let csvContent = '';
+  filterStations?: string[],
+  onProgress?: (pct: number, stage: string) => void
+): Promise<void> {
+  if (onProgress) onProgress(15, 'Preparing CSV data...');
 
   if (mode === 'matrix') {
     const hasActiveFilters = Boolean((filterStations && filterStations.length > 0) || dateStart || dateEnd);
@@ -210,18 +244,42 @@ export function exportToCsv(
       !hasActiveFilters && existingMatrixModel
         ? existingMatrixModel
         : buildMatrixReportFromRecords(records, insatSensors, insatMSL, filterStations, dateStart, dateEnd);
-    if (flattenedHeaders) {
-      csvContent = generateFlattenedMatrixCsv(model);
-    } else {
-      csvContent = generateMatrixCsv(model);
-    }
+
+    if (onProgress) onProgress(40, 'Generating matrix CSV rows...');
+    await new Promise((r) => setTimeout(r, 0));
+
+    const csvBlob = flattenedHeaders
+      ? await generateFlattenedMatrixCsvBlob(model, (pct, stage) => {
+          if (onProgress) onProgress(40 + Math.round(pct * 0.5), stage);
+        })
+      : await generateMatrixCsvBlob(model, (pct, stage) => {
+          if (onProgress) onProgress(40 + Math.round(pct * 0.5), stage);
+        });
+
+    if (onProgress) onProgress(95, 'Preparing download...');
+    downloadCsvWithBom(csvBlob, filename);
   } else {
-    csvContent = generateFlatRecordsCsv(records, sections, insatSensors, insatMSL);
+    // Large dataset streaming optimization
+    if (records.length > 5000) {
+      const blob = await createStreamingCsvBlob(
+        records,
+        sections,
+        insatSensors,
+        insatMSL,
+        onProgress
+      );
+      if (onProgress) onProgress(95, 'Finalizing CSV download...');
+      downloadCsvWithBom(blob, filename);
+    } else {
+      if (onProgress) onProgress(50, 'Generating flat records CSV...');
+      const csvContent = generateFlatRecordsCsv(records, sections, insatSensors, insatMSL);
+      if (onProgress) onProgress(90, 'Preparing download...');
+      downloadCsvWithBom(csvContent, filename);
+    }
   }
 
-  downloadCsvWithBom(csvContent, filename);
+  if (onProgress) onProgress(100, 'CSV export complete');
 }
-
 
 /**
  * Export records as printable landscape CWC report / PDF
@@ -242,3 +300,4 @@ export function exportToPdf(
       : buildMatrixReportFromRecords(records, insatSensors, insatMSL, filterStations, dateStart, dateEnd);
   exportMatrixToPdf(model);
 }
+

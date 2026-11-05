@@ -49,7 +49,7 @@ async function runTestSuite() {
 
   // Test 2: Professional Excel (.xlsx) Generation & Styling
   console.log('\n--- TEST 2: Excel (.xlsx) Multi-Level Header & Styling Verification ---');
-  const wb = createMatrixExcelWorkbook(matrixModel);
+  const wb = await createMatrixExcelWorkbook(matrixModel);
   const outXlsxPath = path.resolve('public/demo/verified_cwc_telemetry.xlsx');
   await wb.xlsx.writeFile(outXlsxPath);
   assert(fs.existsSync(outXlsxPath), 'Generated Excel file must exist on disk');
@@ -150,7 +150,7 @@ async function runTestSuite() {
   assert(csdMatrix.stationGroups.length > 0, `Built CSD matrix with ${csdMatrix.stationGroups.length} stations`);
   assert(csdMatrix.timestamps.length > 0, `Built CSD matrix with ${csdMatrix.timestamps.length} timestamps`);
 
-  const csdWb = createMatrixExcelWorkbook(csdMatrix);
+  const csdWb = await createMatrixExcelWorkbook(csdMatrix);
   const outCsdXlsx = path.resolve('public/demo/csd_matrix_export.xlsx');
   await csdWb.xlsx.writeFile(outCsdXlsx);
   assert(fs.existsSync(outCsdXlsx), 'Generated CSD matrix Excel export file exists');

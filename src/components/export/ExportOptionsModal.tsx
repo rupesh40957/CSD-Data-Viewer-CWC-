@@ -84,7 +84,7 @@ const SECTION_INFO: {
   {
     key: 'rawSensors',
     label: 'Raw Sensor Readings',
-    desc: 'Raw s00–s17 sensor multiplex channels',
+    desc: 'Raw s00â€“s17 sensor multiplex channels',
     icon: <Radio size={15} />,
     columns: ['s00', 's01', 's02', 's03', 's04', 's05', 's06', 's07', 's08', 's09', 's10', 's11', 's12', 's13', 's14', 's15', 's16', 's17'],
   },
@@ -98,14 +98,29 @@ const SECTION_INFO: {
 ];
 
 export function ExportOptionsModal({ isOpen, onClose, format: initialFormat }: ExportOptionsModalProps) {
-  const { file, insatSensors, insatMSL, selectedStations, dateRange } = useAppStore();
+  const {
+    file,
+    activeMode,
+    archiveCatalog,
+    archiveDateRange,
+    activeArchiveRange,
+    archiveMergedFile,
+    insatSensors,
+    insatMSL,
+    selectedStations,
+    dateRange,
+    getRecordsForExport,
+  } = useAppStore();
   const records = useAppStore(selectFilteredRecords);
 
   const [activeFormat, setActiveFormat] = useState<'excel' | 'csv' | 'pdf'>(initialFormat);
+  const [exportScope, setExportScope] = useState<'all_archive' | 'filtered'>('all_archive');
   const [reportMode, setReportMode] = useState<ExportReportMode>('matrix');
   const [flattenedCsv, setFlattenedCsv] = useState(false);
   const [sections, setSections] = useState<ExportSections>({ ...DEFAULT_EXPORT_SECTIONS });
   const [isExporting, setIsExporting] = useState(false);
+  const [exportProgressPct, setExportProgressPct] = useState(0);
+  const [exportProgressStage, setExportProgressStage] = useState('');
   const [exportSuccessMsg, setExportSuccessMsg] = useState<string | null>(null);
   const [exportErrorMsg, setExportErrorMsg] = useState<string | null>(null);
 
@@ -114,6 +129,8 @@ export function ExportOptionsModal({ isOpen, onClose, format: initialFormat }: E
     setActiveFormat(initialFormat);
     setExportSuccessMsg(null);
     setExportErrorMsg(null);
+    setExportProgressPct(0);
+    setExportProgressStage('');
   }, [initialFormat, isOpen]);
 
   if (!isOpen || !file) return null;
@@ -155,7 +172,10 @@ export function ExportOptionsModal({ isOpen, onClose, format: initialFormat }: E
   );
 
   // Calculate unique station count and dynamic date range info
-  const uniqueStationsCount = file.stations?.length || new Set(records.map((r) => r.stationId)).size;
+  const validStationsList = file.stations?.filter((s) => s.stationId !== 'CORRUPT_FRAME' && s.stationId !== 'UNKNOWN') || [];
+  const uniqueStationsCount = validStationsList.length > 0
+    ? validStationsList.length
+    : new Set(records.map((r) => r.stationId).filter((id) => id && id !== 'CORRUPT_FRAME' && id !== 'UNKNOWN')).size;
   const hasActiveFilter = selectedStations.length > 0 || dateRange.start !== null || dateRange.end !== null;
 
   // Dynamically resolve start and end dates from filters or records
@@ -179,31 +199,52 @@ export function ExportOptionsModal({ isOpen, onClose, format: initialFormat }: E
     if (isExporting) return;
 
     setIsExporting(true);
+    setExportProgressPct(5);
+    setExportProgressStage('Resolving export telemetry records...');
     setExportSuccessMsg(null);
     setExportErrorMsg(null);
 
     try {
+      const {
+        records: exportRecords,
+        sourceFile,
+        startDate,
+        endDate,
+      } = await getRecordsForExport(exportScope, (pct, stage) => {
+        setExportProgressPct(pct);
+        setExportProgressStage(stage);
+      });
+
+      if (!exportRecords || exportRecords.length === 0) {
+        throw new Error('No telemetry records found matching the chosen criteria.');
+      }
+
       const ext = activeFormat === 'excel' ? 'xlsx' : 'csv';
       const filename = generateExportFilename(
-        file.filename,
-        effectiveStartDate,
-        effectiveEndDate,
+        exportScope === 'all_archive' && archiveCatalog
+          ? archiveCatalog.folderName
+          : file.filename,
+        startDate || effectiveStartDate,
+        endDate || effectiveEndDate,
         ext,
         reportMode === 'matrix' ? (flattenedCsv && ext === 'csv' ? 'flattened' : undefined) : 'records'
       );
 
-      // Pass existing matrix model only if no active station or date filters are applied
-      const existingMatrix = !hasActiveFilter ? ((file as any).matrixModel || null) : null;
+      // Pass existing matrix model only if on single file without filters
+      const existingMatrix =
+        exportScope !== 'all_archive' && !hasActiveFilter
+          ? ((sourceFile as any).matrixModel || null)
+          : null;
 
       if (activeFormat === 'pdf') {
         exportToPdf(
-          records,
+          exportRecords,
           insatSensors,
           insatMSL,
           existingMatrix,
-          effectiveStartDate,
-          effectiveEndDate,
-          selectedStations
+          startDate || effectiveStartDate,
+          endDate || effectiveEndDate,
+          exportScope === 'filtered' ? selectedStations : undefined
         );
         setExportSuccessMsg('Opening print / PDF dialog...');
         setTimeout(() => {
@@ -215,20 +256,24 @@ export function ExportOptionsModal({ isOpen, onClose, format: initialFormat }: E
 
       if (activeFormat === 'excel') {
         await exportToExcel(
-          records,
+          exportRecords,
           filename,
           sections,
           insatSensors,
           insatMSL,
           reportMode,
           existingMatrix,
-          effectiveStartDate,
-          effectiveEndDate,
-          selectedStations
+          startDate || effectiveStartDate,
+          endDate || effectiveEndDate,
+          exportScope === 'filtered' ? selectedStations : undefined,
+          (pct, stage) => {
+            setExportProgressPct(pct);
+            setExportProgressStage(stage);
+          }
         );
       } else {
-        exportToCsv(
-          records,
+        await exportToCsv(
+          exportRecords,
           filename,
           sections,
           insatSensors,
@@ -236,17 +281,23 @@ export function ExportOptionsModal({ isOpen, onClose, format: initialFormat }: E
           reportMode,
           flattenedCsv,
           existingMatrix,
-          effectiveStartDate,
-          effectiveEndDate,
-          selectedStations
+          startDate || effectiveStartDate,
+          endDate || effectiveEndDate,
+          exportScope === 'filtered' ? selectedStations : undefined,
+          (pct, stage) => {
+            setExportProgressPct(pct);
+            setExportProgressStage(stage);
+          }
         );
       }
 
-      setExportSuccessMsg(`Successfully generated and downloaded "${filename}"`);
+      setExportSuccessMsg(
+        `Successfully generated and downloaded "${filename}" (${exportRecords.length.toLocaleString()} records)`
+      );
       setTimeout(() => {
         setIsExporting(false);
         onClose();
-      }, 1200);
+      }, 1500);
     } catch (err: unknown) {
       console.error('Export error:', err);
       setExportErrorMsg(err instanceof Error ? err.message : 'Export failed. Please try again.');
@@ -469,6 +520,100 @@ export function ExportOptionsModal({ isOpen, onClose, format: initialFormat }: E
             </div>
             <div style={{ fontWeight: 800, fontSize: '0.86rem', color: '#002060', marginTop: '3px' }}>
               {dynamicPeriodText}
+            </div>
+          </div>
+        </div>
+
+        {/* ─── Export Data Scope Selector (Phase 4: Zero Truncation Dual Modes) ─── */}
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', background: 'var(--bg-subtle)' }}>
+          <div style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            SELECT DATA SCOPE (ZERO TRUNCATION)
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            {/* Scope 1: Export All Archive Data */}
+            <div
+              onClick={() => setExportScope('all_archive')}
+              style={{
+                padding: '12px 14px',
+                borderRadius: 'var(--radius-md)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                background:
+                  exportScope === 'all_archive' ? 'rgba(16, 185, 129, 0.1)' : 'var(--bg-surface)',
+                border:
+                  exportScope === 'all_archive'
+                    ? '1.5px solid #10b981'
+                    : '1px solid var(--border)',
+                display: 'flex',
+                gap: '10px',
+              }}
+            >
+              <div
+                style={{
+                  width: '18px',
+                  height: '18px',
+                  borderRadius: '50%',
+                  border: exportScope === 'all_archive' ? '5px solid #10b981' : '2px solid var(--text-dim)',
+                  marginTop: '2px',
+                  flexShrink: 0,
+                  transition: 'all 0.15s ease',
+                }}
+              />
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-main)', marginBottom: '2px' }}>
+                  Export All Archive Data
+                </div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', lineHeight: 1.35 }}>
+                  {archiveCatalog
+                    ? `Every record across all ${archiveCatalog.totalFiles} files in the archive (${archiveCatalog.availableYears.length} year${archiveCatalog.availableYears.length > 1 ? 's' : ''})`
+                    : 'Exports complete multi-year archive with zero truncation'}
+                </div>
+              </div>
+            </div>
+
+            {/* Scope 2: Export Current Filtered Data */}
+            <div
+              onClick={() => setExportScope('filtered')}
+              style={{
+                padding: '12px 14px',
+                borderRadius: 'var(--radius-md)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                background:
+                  exportScope === 'filtered' ? 'rgba(56, 189, 248, 0.1)' : 'var(--bg-surface)',
+                border:
+                  exportScope === 'filtered'
+                    ? '1.5px solid var(--primary-light)'
+                    : '1px solid var(--border)',
+                display: 'flex',
+                gap: '10px',
+              }}
+            >
+              <div
+                style={{
+                  width: '18px',
+                  height: '18px',
+                  borderRadius: '50%',
+                  border: exportScope === 'filtered' ? '5px solid var(--primary-light)' : '2px solid var(--text-dim)',
+                  marginTop: '2px',
+                  flexShrink: 0,
+                  transition: 'all 0.15s ease',
+                }}
+              />
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-main)', marginBottom: '2px' }}>
+                  Export Current Filtered Data
+                </div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', lineHeight: 1.35 }}>
+                  {activeArchiveRange
+                    ? `Date range: ${activeArchiveRange.from} to ${activeArchiveRange.to} (${activeArchiveRange.count} files) • Respects active filters`
+                    : archiveDateRange?.from && archiveDateRange?.to
+                    ? `Date range: ${archiveDateRange.from} to ${archiveDateRange.to} • Respects active filters`
+                    : hasActiveFilter
+                    ? 'Respects active date range, station, and quality filters'
+                    : 'Exports currently selected date / view filters'}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -778,6 +923,29 @@ export function ExportOptionsModal({ isOpen, onClose, format: initialFormat }: E
           </div>
         )}
 
+        {/* Real-time Export Progress Bar */}
+        {isExporting && (
+          <div style={{ padding: '12px 20px', background: 'rgba(2, 132, 199, 0.12)', borderTop: '1px solid var(--border-focus)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem', marginBottom: '6px' }}>
+              <span style={{ color: 'var(--primary-light)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Loader2 size={13} className="animate-spin" />
+                <span>{exportProgressStage || 'Processing telemetry records...'}</span>
+              </span>
+              <span className="mono-font" style={{ color: 'var(--text-main)', fontWeight: 700 }}>{exportProgressPct}%</span>
+            </div>
+            <div style={{ height: '6px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.1)', overflow: 'hidden' }}>
+              <div
+                style={{
+                  height: '100%',
+                  width: `${exportProgressPct}%`,
+                  background: 'linear-gradient(90deg, #0284c7, #10b981)',
+                  transition: 'width 0.25s ease',
+                }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Notifications */}
         {exportSuccessMsg && (
           <div
@@ -856,14 +1024,14 @@ export function ExportOptionsModal({ isOpen, onClose, format: initialFormat }: E
               <>
                 <Printer size={15} />
                 <span>
-                  Print / Save as PDF ({reportMode === 'matrix' ? 'Matrix' : `${records.length.toLocaleString()} Records`})
+                  Print / Save as PDF ({exportScope === 'all_archive' ? 'All Archive Data' : reportMode === 'matrix' ? 'Matrix' : `${records.length.toLocaleString()} Records`})
                 </span>
               </>
             ) : (
               <>
                 <Download size={15} />
                 <span>
-                  Download {activeFormat.toUpperCase()} ({reportMode === 'matrix' ? 'Matrix' : `${records.length.toLocaleString()} Records`})
+                  Download {activeFormat.toUpperCase()} ({exportScope === 'all_archive' ? 'All Archive Data' : reportMode === 'matrix' ? 'Matrix' : `${records.length.toLocaleString()} Records`})
                 </span>
               </>
             )}

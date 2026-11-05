@@ -1,13 +1,11 @@
 /**
  * Professional PDF / Print Exporter for CWC Telemetry Reports
  * Generates an official, print-ready document formatted for landscape PDF output
- * with exact CWC header banner, multi-level headers, and repeating headers.
+ * with exact CWC header banner, multi-level headers, repeating headers,
+ * station safety limits for paper rendering, and hidden iframe printing (no popup blocker).
  */
 
 import { MatrixReportModel } from './types';
-import { CsdRecord } from '@/types/csd';
-import { ExportSections, formatRecordsForExport, DEFAULT_EXPORT_SECTIONS } from '../utils/export';
-import { InsatSensorConfig } from '../insat/types';
 
 /**
  * Escapes HTML characters
@@ -22,12 +20,18 @@ function escapeHtml(str: unknown): string {
     .replace(/'/g, '&#039;');
 }
 
+const MAX_PRINT_STATIONS = 20;
+const MAX_PRINT_ROWS = 500;
+
 /**
  * Generates clean, print-ready HTML for the CWC Multi-Station Matrix Report
  */
 export function generateMatrixPrintHtml(model: MatrixReportModel): string {
+  const stationGroups = model.stationGroups.slice(0, MAX_PRINT_STATIONS);
+  const isCapped = model.stationGroups.length > MAX_PRINT_STATIONS;
+
   // 1. Station headers
-  const stationThs = model.stationGroups
+  const stationThs = stationGroups
     .map(
       (g) =>
         `<th class="station" colspan="${g.colSpan}">${escapeHtml(g.stationName)}</th>`
@@ -35,14 +39,14 @@ export function generateMatrixPrintHtml(model: MatrixReportModel): string {
     .join('');
 
   // 2. Sensor headers
-  const sensorThs = model.stationGroups
+  const sensorThs = stationGroups
     .flatMap((g) =>
       g.sensors.map((s) => `<th class="sensor">${escapeHtml(s.name)}</th>`)
     )
     .join('');
 
   // 3. WIMS Station Code headers
-  const wimsThs = model.stationGroups
+  const wimsThs = stationGroups
     .map(
       (g) =>
         `<th class="meta" colspan="${g.colSpan}">${escapeHtml(g.wimsCode || '---')}</th>`
@@ -50,7 +54,7 @@ export function generateMatrixPrintHtml(model: MatrixReportModel): string {
     .join('');
 
   // 4. Datalogger ID headers
-  const idThs = model.stationGroups
+  const idThs = stationGroups
     .map(
       (g) =>
         `<th class="meta id" colspan="${g.colSpan}">${escapeHtml(g.stationId)}</th>`
@@ -58,22 +62,25 @@ export function generateMatrixPrintHtml(model: MatrixReportModel): string {
     .join('');
 
   // 5. Sensor Units
-  const unitThs = model.stationGroups
+  const unitThs = stationGroups
     .flatMap((g) =>
       g.sensors.map((s) => `<th class="unit">${escapeHtml(s.unit || '---')}</th>`)
     )
     .join('');
 
-  // 6. Data rows
-  const dataRows = model.timestamps
+  // 6. Data rows (Capped for printable paper)
+  const printTimestamps = model.timestamps.slice(0, MAX_PRINT_ROWS);
+  const dataRows = printTimestamps
     .map((ts) => {
       const rowVals = model.grid.get(ts) || [ts];
       const cells: string[] = [`<td class="time">${escapeHtml(ts)}</td>`];
-      for (let c = 1; c < model.totalColumns; c++) {
-        const v = rowVals[c];
-        const valStr = v !== undefined && v !== null ? String(v) : '---';
-        const isMuted = valStr === '---' || valStr === '-40' || valStr === '0';
-        cells.push(`<td class="${isMuted ? 'muted' : ''}">${escapeHtml(valStr)}</td>`);
+      for (const g of stationGroups) {
+        for (const s of g.sensors) {
+          const v = rowVals[s.colIndex];
+          const valStr = v !== undefined && v !== null ? String(v) : '---';
+          const isMuted = valStr === '---' || valStr === '-40' || valStr === '0';
+          cells.push(`<td class="${isMuted ? 'muted' : ''}">${escapeHtml(valStr)}</td>`);
+        }
       }
       return `<tr>${cells.join('')}</tr>`;
     })
@@ -105,7 +112,7 @@ export function generateMatrixPrintHtml(model: MatrixReportModel): string {
       text-align: center;
       border: 2px solid #000000;
       padding: 10px 14px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
       background: #ffffff;
       border-radius: 4px;
     }
@@ -120,6 +127,16 @@ export function generateMatrixPrintHtml(model: MatrixReportModel): string {
       font-weight: 800;
       color: #002060;
       margin-top: 3px;
+    }
+    .print-notice {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      padding: 6px 12px;
+      margin-bottom: 10px;
+      font-size: 11px;
+      text-align: center;
+      border-radius: 4px;
+      color: #334155;
     }
     .table-container {
       width: 100%;
@@ -210,6 +227,14 @@ export function generateMatrixPrintHtml(model: MatrixReportModel): string {
     <div class="header-period">${escapeHtml(model.periodText)}</div>
   </div>
 
+  ${
+    isCapped
+      ? `<div class="print-notice no-print">
+          <strong>Print Document Notice:</strong> Displaying first ${MAX_PRINT_STATIONS} of ${model.stationGroups.length} stations formatted for landscape paper. For the complete multi-year archive of all stations, please use <strong>Excel (.xlsx)</strong> or <strong>CSV</strong> export.
+        </div>`
+      : ''
+  }
+
   <div class="table-container">
     <table>
       <thead>
@@ -240,30 +265,44 @@ export function generateMatrixPrintHtml(model: MatrixReportModel): string {
 }
 
 /**
- * Triggers PDF export via print-to-PDF in a clean child window
+ * Triggers PDF export via hidden iframe to eliminate browser popup blockers
  */
 export function exportMatrixToPdf(model: MatrixReportModel): void {
   if (typeof window === 'undefined') return;
 
   const html = generateMatrixPrintHtml(model);
-  const printWindow = window.open('', '_blank', 'width=1200,height=800');
 
-  if (!printWindow) {
-    // Popup blocked, fallback to printing current page
-    window.print();
-    return;
+  // Use a dedicated hidden iframe to avoid browser popup blockers
+  let iframe = document.getElementById('csd-print-frame') as HTMLIFrameElement;
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = 'csd-print-frame';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.style.opacity = '0';
+    iframe.style.pointerEvents = 'none';
+    document.body.appendChild(iframe);
   }
 
-  printWindow.document.open();
-  printWindow.document.write(html);
-  printWindow.document.close();
+  const doc = iframe.contentWindow?.document || iframe.contentDocument;
+  if (doc) {
+    doc.open();
+    doc.write(html);
+    doc.close();
 
-  // Wait for rendering then trigger print
-  printWindow.onload = () => {
-    printWindow.focus();
+    // Trigger print once iframe resources are ready
     setTimeout(() => {
-      printWindow.print();
-    }, 250);
-  };
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (e) {
+        console.warn('Iframe print error, falling back to window.print():', e);
+        window.print();
+      }
+    }, 350);
+  }
 }
-
