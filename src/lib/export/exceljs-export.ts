@@ -6,10 +6,11 @@
  */
 
 import ExcelJS from 'exceljs';
-import { MatrixReportModel, StationColumnGroup } from './types';
+import { MatrixReportModel, StationColumnGroup, ExportSpeedMode } from './types';
 import { CsdRecord } from '@/types/csd';
 import { ExportSections, formatRecordsForExport, DEFAULT_EXPORT_SECTIONS } from '../utils/export';
 import { InsatSensorConfig } from '../insat/types';
+import { ExportProgressController } from './progress-controller';
 
 // Color Palette Constants
 const COLOR_TITLE_BG = 'FF0F2744';      // Dark Navy Blue
@@ -60,6 +61,8 @@ const FILL_ZEBRA_EVEN: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgCol
 const FONT_DATA_DEFAULT: Partial<ExcelJS.Font> = { name: FONT_FAMILY, size: 9, color: { argb: 'FF0F172A' } };
 const FONT_EMPTY_DEFAULT: Partial<ExcelJS.Font> = { name: FONT_FAMILY, size: 9, color: { argb: 'FF94A3B8' } };
 const FONT_TIME: Partial<ExcelJS.Font> = { name: 'Consolas, monospace', size: 9, bold: true, color: { argb: 'FF0F172A' } };
+const ALIGN_CENTER: Partial<ExcelJS.Alignment> = { horizontal: 'center', vertical: 'middle' };
+const ALIGN_RIGHT: Partial<ExcelJS.Alignment> = { horizontal: 'right', vertical: 'middle' };
 
 /**
  * Configure standard CWC header rows 1-6 for a Matrix worksheet.
@@ -301,7 +304,7 @@ function setupMatrixHeaders(
   }
 }
 
-const MAX_STATIONS_PER_SHEET = 1500; // 1500 stations * 6 sensors = 9000 columns <= 16384
+const MAX_STATIONS_PER_SHEET = 250; // 250 stations * 6 sensors = 1,500 columns <= 16384 (super-fast, low memory)
 
 /**
  * Generate a styled ExcelJS Workbook from a MatrixReportModel.
@@ -310,13 +313,17 @@ const MAX_STATIONS_PER_SHEET = 1500; // 1500 stations * 6 sensors = 9000 columns
  */
 export async function createMatrixExcelWorkbook(
   model: MatrixReportModel,
-  onProgress?: (pct: number, stage: string) => void
+  onProgress?: ((pct: number, stage: string) => void) | ExportProgressController,
+  speedMode: ExportSpeedMode = 'balanced'
 ): Promise<ExcelJS.Workbook> {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Central Water Commission (CWC)';
   wb.lastModifiedBy = 'CWC Telemetry System';
   wb.created = new Date();
   wb.modified = new Date();
+
+  const controller = onProgress instanceof ExportProgressController ? onProgress : null;
+  const onProgressCallback = typeof onProgress === 'function' ? onProgress : null;
 
   const allStationGroups = model.stationGroups;
   const stationPartitions: StationColumnGroup[][] = [];
@@ -332,6 +339,7 @@ export async function createMatrixExcelWorkbook(
   const totalRows = timestamps.length;
   const rowChunksCount = Math.max(1, Math.ceil(totalRows / MAX_ROWS_PER_SHEET));
   const totalSheets = stationPartitions.length * rowChunksCount;
+  const totalGlobalRows = Math.max(1, totalSheets * totalRows);
 
   let sheetCounter = 0;
 
@@ -387,13 +395,24 @@ export async function createMatrixExcelWorkbook(
       const sheetTimestamps = timestamps.slice(startIdx, endIdx);
 
       let currentExcelRow = 7;
+      const yieldInterval = speedMode === 'fast' ? 40 : 20;
 
       for (let rIdx = 0; rIdx < sheetTimestamps.length; rIdx++) {
-        // Yield to browser event loop every 25 rows to keep UI responsive and report progress
-        if (rIdx % 25 === 0) {
-          if (onProgress) {
-            const pct = 40 + Math.round((rIdx / sheetTimestamps.length) * 38);
-            onProgress(pct, `Formatting matrix rows: ${rIdx + 1} / ${sheetTimestamps.length}`);
+        const globalRowIndex = (sheetCounter - 1) * totalRows + (startIdx + rIdx + 1);
+
+        // Yield to browser event loop to keep UI responsive and report progress
+        if (rIdx % yieldInterval === 0 || rIdx === sheetTimestamps.length - 1) {
+          if (controller) {
+            controller.checkAborted();
+            controller.update(
+              'FORMATTING',
+              globalRowIndex,
+              totalGlobalRows,
+              `Formatting matrix rows: ${globalRowIndex} / ${totalGlobalRows}${totalSheets > 1 ? ` (Sheet ${sheetCounter}/${totalSheets})` : ''}`
+            );
+          } else if (onProgressCallback) {
+            const pct = 50 + Math.round((globalRowIndex / totalGlobalRows) * 35);
+            onProgressCallback(pct, `Formatting matrix rows: ${globalRowIndex} / ${totalGlobalRows}`);
           }
           await new Promise((resolve) => setTimeout(resolve, 0));
         }
@@ -401,17 +420,90 @@ export async function createMatrixExcelWorkbook(
         const ts = sheetTimestamps[rIdx];
         const row = ws.getRow(currentExcelRow);
         row.height = 16.5;
+        const rowData = model.grid.get(ts) || [ts];
+
+        // ─── Fast Mode: Bulk array insertion, column-level styling, 0 cell object bloat ───
+        if (speedMode === 'fast') {
+          const rowVals: (string | number)[] = [ts];
+          for (const group of partitionGroups) {
+            for (const s of group.sensors) {
+              const rawVal = rowData[s.colIndex];
+              rowVals.push(rawVal === undefined || rawVal === null ? '---' : rawVal);
+            }
+          }
+          row.values = rowVals;
+          const dateCell = row.getCell(1);
+          dateCell.font = FONT_TIME;
+          dateCell.alignment = ALIGN_CENTER;
+          currentExcelRow++;
+          continue;
+        }
+
+        // ─── Balanced Mode: Bulk row insertion + station boundary separation + numbers ───
+        if (speedMode === 'balanced') {
+          const isOdd = rIdx % 2 === 1;
+          const rowFill = isOdd ? FILL_ZEBRA_ODD : FILL_ZEBRA_EVEN;
+          const rowVals: (string | number)[] = [ts];
+          for (const group of partitionGroups) {
+            for (const s of group.sensors) {
+              const rawVal = rowData[s.colIndex];
+              rowVals.push(rawVal === undefined || rawVal === null ? '---' : rawVal);
+            }
+          }
+          row.values = rowVals;
+
+          const dateCell = row.getCell(1);
+          dateCell.fill = rowFill;
+          dateCell.font = FONT_TIME;
+          dateCell.alignment = ALIGN_CENTER;
+          dateCell.border = {
+            top: THIN_BORDER,
+            bottom: THIN_BORDER,
+            left: { style: 'medium', color: { argb: COLOR_BORDER_SEP } },
+            right: { style: 'medium', color: { argb: COLOR_BORDER_SEP } },
+          };
+
+          let curCellCol = 2;
+          for (const group of partitionGroups) {
+            if (curCellCol > 16384) break;
+            for (const s of group.sensors) {
+              if (curCellCol > 16384) break;
+              const rawVal = rowData[s.colIndex];
+              const isBoundary = boundaryColSet.has(curCellCol);
+
+              const cell = row.getCell(curCellCol);
+              cell.fill = rowFill;
+              cell.border = isBoundary ? CELL_BORDER_BOUNDARY : CELL_BORDER_NORMAL;
+
+              if (typeof rawVal === 'number') {
+                cell.font = FONT_DATA_DEFAULT;
+                cell.alignment = ALIGN_RIGHT;
+                cell.numFmt = Number.isInteger(rawVal) ? '#,##0' : '#,##0.00';
+              } else if (rawVal === '---' || rawVal === undefined || rawVal === null) {
+                cell.font = FONT_EMPTY_DEFAULT;
+                cell.alignment = ALIGN_CENTER;
+              } else {
+                cell.font = FONT_DATA_DEFAULT;
+                cell.alignment = ALIGN_CENTER;
+              }
+
+              curCellCol++;
+            }
+          }
+          currentExcelRow++;
+          continue;
+        }
+
+        // ─── Professional Mode: Full cell-by-cell borders, fonts, alignments ───
         const isOdd = rIdx % 2 === 1;
         const rowFill = isOdd ? FILL_ZEBRA_ODD : FILL_ZEBRA_EVEN;
-
-        const rowData = model.grid.get(ts) || [ts];
 
         // Col 1: Timestamp
         const dateCell = row.getCell(1);
         dateCell.value = ts;
         dateCell.fill = rowFill;
         dateCell.font = FONT_TIME;
-        dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        dateCell.alignment = ALIGN_CENTER;
         dateCell.border = {
           top: THIN_BORDER,
           bottom: THIN_BORDER,
@@ -435,16 +527,16 @@ export async function createMatrixExcelWorkbook(
             if (rawVal === undefined || rawVal === null || rawVal === '---') {
               cell.value = '---';
               cell.font = FONT_EMPTY_DEFAULT;
-              cell.alignment = { horizontal: 'center', vertical: 'middle' };
+              cell.alignment = ALIGN_CENTER;
             } else if (typeof rawVal === 'number') {
               cell.value = rawVal;
               cell.font = FONT_DATA_DEFAULT;
-              cell.alignment = { horizontal: 'right', vertical: 'middle' };
+              cell.alignment = ALIGN_RIGHT;
               cell.numFmt = Number.isInteger(rawVal) ? '#,##0' : '#,##0.00';
             } else {
               cell.value = rawVal;
               cell.font = FONT_DATA_DEFAULT;
-              cell.alignment = { horizontal: 'center', vertical: 'middle' };
+              cell.alignment = ALIGN_CENTER;
             }
 
             curCellCol++;

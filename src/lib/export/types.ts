@@ -8,6 +8,7 @@ import { InsatSensorConfig } from '../insat/types';
 import { ExportSections } from '../utils/export';
 
 export type ExportReportMode = 'matrix' | 'flat';
+export type ExportSpeedMode = 'fast' | 'balanced' | 'professional';
 
 export interface StationColumnGroup {
   stationName: string;
@@ -44,6 +45,7 @@ export interface ExportProgress {
 
 export interface AdvancedExportOptions {
   mode: ExportReportMode;           // 'matrix' (CWC Standard) or 'flat'
+  speedMode?: ExportSpeedMode;      // 'fast' | 'balanced' | 'professional'
   filename?: string;
   sections?: ExportSections;        // For flat mode
   insatSensors?: InsatSensorConfig[];

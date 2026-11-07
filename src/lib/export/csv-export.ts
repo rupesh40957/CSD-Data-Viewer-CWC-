@@ -12,6 +12,21 @@ import { MatrixReportModel } from './types';
 import { CsdRecord } from '@/types/csd';
 import { ExportSections, formatRecordsForExport, DEFAULT_EXPORT_SECTIONS } from '../utils/export';
 import { InsatSensorConfig } from '../insat/types';
+import { ExportProgressController } from './progress-controller';
+
+/**
+ * Ultra-fast cell escaper bypassing regex for numbers and null/empty markers.
+ */
+export function fastEscapeCell(value: unknown): string {
+  if (value === null || value === undefined) return '---';
+  if (typeof value === 'number') return String(value);
+  if (value === '---') return '---';
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
 
 /**
  * Escapes a cell value according to RFC 4180.
@@ -178,13 +193,12 @@ export async function generateMatrixCsvBlob(
   for (let i = 0; i < totalRows; i++) {
     const ts = model.timestamps[i];
     const rowVals = model.grid.get(ts) || [ts];
-    const cells = new Array(totalCols);
-    cells[0] = escapeCsvCell(ts);
+    let lineStr = ts;
     for (let c = 1; c < totalCols; c++) {
       const v = rowVals[c];
-      cells[c] = escapeCsvCell(v !== undefined && v !== null ? v : '---');
+      lineStr += ',' + (v === undefined || v === null || v === '---' ? '---' : typeof v === 'number' ? v : fastEscapeCell(v));
     }
-    batchBuffer.push(cells.join(','));
+    batchBuffer.push(lineStr);
 
     if (batchBuffer.length >= BATCH_SIZE || i === totalRows - 1) {
       chunks.push(batchBuffer.join('\r\n') + '\r\n');
@@ -308,8 +322,11 @@ export async function createStreamingCsvBlob(
   sections: ExportSections = DEFAULT_EXPORT_SECTIONS,
   insatSensors?: InsatSensorConfig[],
   insatMSL: number = 0,
-  onProgress?: (progressPct: number, stage: string) => void
+  onProgress?: ((progressPct: number, stage: string) => void) | ExportProgressController
 ): Promise<Blob> {
+  const controller = onProgress instanceof ExportProgressController ? onProgress : null;
+  const onProgressCallback = typeof onProgress === 'function' ? onProgress : null;
+
   const chunks: string[] = ['\uFEFF']; // UTF-8 BOM
   const data = formatRecordsForExport(records, sections, insatSensors, insatMSL);
 
@@ -336,9 +353,12 @@ export async function createStreamingCsvBlob(
       chunks.push(batchBuffer.join('\r\n') + '\r\n');
       batchBuffer = [];
 
-      if (onProgress) {
+      if (controller) {
+        controller.checkAborted();
+        controller.update('FORMATTING', i + 1, total, `Formatting CSV: ${i + 1} / ${total} records`);
+      } else if (onProgressCallback) {
         const pct = Math.round(((i + 1) / total) * 100);
-        onProgress(pct, `Formatting CSV: ${i + 1} / ${total} records`);
+        onProgressCallback(pct, `Formatting CSV: ${i + 1} / ${total} records`);
       }
       // Yield to let UI render progress
       await new Promise((r) => setTimeout(r, 0));

@@ -9,7 +9,8 @@ import { CsdRecord } from '@/types/csd';
 import { formatCsdTimestamp } from '../parser/timestamp-parser';
 import { InsatSensorConfig } from '../insat/types';
 import { computeRecordEngineeringValues } from '../insat/compute';
-import { MatrixReportModel, ExportReportMode } from '../export/types';
+import { MatrixReportModel, ExportReportMode, ExportSpeedMode } from '../export/types';
+export type { ExportSpeedMode } from '../export/types';
 import { buildMatrixReportFromRecords, formatCwcDateShort } from '../export/matrix-builder';
 export { buildMatrixReportFromRecords, formatCwcDateShort, formatTelemetryTimestamp, resolveCalibratedSensorValue } from '../export/matrix-builder';
 import {
@@ -27,6 +28,7 @@ import {
   createStreamingCsvBlob,
   downloadCsvWithBom,
 } from '../export/csv-export';
+import { ExportProgressController } from '../export/progress-controller';
 import {
   exportMatrixToPdf,
 } from '../export/pdf-export';
@@ -173,9 +175,17 @@ export async function exportToExcel(
   dateStart?: Date | null,
   dateEnd?: Date | null,
   filterStations?: string[],
-  onProgress?: (pct: number, stage: string) => void
+  onProgress?: ((pct: number, stage: string) => void) | ExportProgressController,
+  speedMode: ExportSpeedMode = 'balanced'
 ): Promise<void> {
-  if (onProgress) onProgress(10, 'Building Excel model...');
+  const controller = onProgress instanceof ExportProgressController ? onProgress : null;
+  const onProgressCallback = typeof onProgress === 'function' ? onProgress : null;
+
+  if (controller) {
+    controller.update('BUILDING_STRUCTURE', 1, 10, 'Building Excel model structure...');
+  } else if (onProgressCallback) {
+    onProgressCallback(35, 'Building Excel model...');
+  }
 
   let workbook;
 
@@ -186,10 +196,14 @@ export async function exportToExcel(
         ? existingMatrixModel
         : buildMatrixReportFromRecords(records, insatSensors, insatMSL, filterStations, dateStart, dateEnd);
 
-    if (onProgress) onProgress(40, 'Formatting matrix worksheet styling & headers...');
+    if (controller) {
+      controller.update('FORMATTING', 0, records.length, 'Formatting matrix worksheet styling & headers...');
+    } else if (onProgressCallback) {
+      onProgressCallback(48, 'Formatting matrix worksheet styling & headers...');
+    }
     await new Promise((r) => setTimeout(r, 0));
 
-    workbook = await createMatrixExcelWorkbook(model, onProgress);
+    workbook = await createMatrixExcelWorkbook(model, onProgress, speedMode);
   } else {
     // For large datasets (> 25,000 records), use high-performance SheetJS to prevent V8 memory crashes
     if (records.length > 25000) {
@@ -201,22 +215,38 @@ export async function exportToExcel(
         insatMSL,
         onProgress
       );
-      if (onProgress) onProgress(100, 'Excel export complete');
+      if (controller) {
+        controller.update('COMPLETED', 1, 1, 'Excel export complete');
+      } else if (onProgressCallback) {
+        onProgressCallback(100, 'Excel export complete');
+      }
       return;
     }
 
-    if (onProgress) onProgress(40, `Formatting ${records.length} records for Excel...`);
+    if (controller) {
+      controller.update('FORMATTING', 1, records.length, `Formatting ${records.length} records for Excel...`);
+    } else if (onProgressCallback) {
+      onProgressCallback(45, `Formatting ${records.length} records for Excel...`);
+    }
     await new Promise((r) => setTimeout(r, 0));
 
     workbook = createFlatExcelWorkbook(records, sections, insatSensors, insatMSL);
   }
 
-  if (onProgress) onProgress(80, 'Writing Excel binary buffer...');
+  if (controller) {
+    controller.update('GENERATING_FILE', 1, 2, 'Writing Excel binary buffer...');
+  } else if (onProgressCallback) {
+    onProgressCallback(88, 'Writing Excel binary buffer...');
+  }
   await new Promise((r) => setTimeout(r, 0));
 
   await downloadExcelWorkbook(workbook, filename);
 
-  if (onProgress) onProgress(100, 'Excel export complete');
+  if (controller) {
+    controller.update('COMPLETED', 1, 1, 'Excel export complete');
+  } else if (onProgressCallback) {
+    onProgressCallback(100, 'Excel export complete');
+  }
 }
 
 /**
@@ -234,9 +264,16 @@ export async function exportToCsv(
   dateStart?: Date | null,
   dateEnd?: Date | null,
   filterStations?: string[],
-  onProgress?: (pct: number, stage: string) => void
+  onProgress?: ((pct: number, stage: string) => void) | ExportProgressController
 ): Promise<void> {
-  if (onProgress) onProgress(15, 'Preparing CSV data...');
+  const controller = onProgress instanceof ExportProgressController ? onProgress : null;
+  const onProgressCallback = typeof onProgress === 'function' ? onProgress : null;
+
+  if (controller) {
+    controller.update('BUILDING_STRUCTURE', 1, 10, 'Preparing CSV data structure...');
+  } else if (onProgressCallback) {
+    onProgressCallback(35, 'Preparing CSV data...');
+  }
 
   if (mode === 'matrix') {
     const hasActiveFilters = Boolean((filterStations && filterStations.length > 0) || dateStart || dateEnd);
@@ -245,19 +282,38 @@ export async function exportToCsv(
         ? existingMatrixModel
         : buildMatrixReportFromRecords(records, insatSensors, insatMSL, filterStations, dateStart, dateEnd);
 
-    if (onProgress) onProgress(40, 'Generating matrix CSV rows...');
+    if (controller) {
+      controller.update('FORMATTING', 0, model.timestamps.length, 'Generating matrix CSV rows...');
+    } else if (onProgressCallback) {
+      onProgressCallback(48, 'Generating matrix CSV rows...');
+    }
     await new Promise((r) => setTimeout(r, 0));
 
     const csvBlob = flattenedHeaders
       ? await generateFlattenedMatrixCsvBlob(model, (pct, stage) => {
-          if (onProgress) onProgress(40 + Math.round(pct * 0.5), stage);
+          if (controller) {
+            controller.update('FORMATTING', Math.round((pct / 100) * model.timestamps.length), model.timestamps.length, stage);
+          } else if (onProgressCallback) {
+            onProgressCallback(48 + Math.round(pct * 0.45), stage);
+          }
         })
       : await generateMatrixCsvBlob(model, (pct, stage) => {
-          if (onProgress) onProgress(40 + Math.round(pct * 0.5), stage);
+          if (controller) {
+            controller.update('FORMATTING', Math.round((pct / 100) * model.timestamps.length), model.timestamps.length, stage);
+          } else if (onProgressCallback) {
+            onProgressCallback(48 + Math.round(pct * 0.45), stage);
+          }
         });
 
-    if (onProgress) onProgress(95, 'Preparing download...');
+    if (controller) {
+      controller.update('PREPARING_DOWNLOAD', 1, 1, 'Preparing download...');
+    } else if (onProgressCallback) {
+      onProgressCallback(95, 'Preparing download...');
+    }
     downloadCsvWithBom(csvBlob, filename);
+    if (controller) {
+      controller.update('COMPLETED', 1, 1, 'CSV export complete');
+    }
   } else {
     // Large dataset streaming optimization
     if (records.length > 5000) {
@@ -268,17 +324,39 @@ export async function exportToCsv(
         insatMSL,
         onProgress
       );
-      if (onProgress) onProgress(95, 'Finalizing CSV download...');
+      if (controller) {
+        controller.update('PREPARING_DOWNLOAD', 1, 1, 'Finalizing CSV download...');
+      } else if (onProgressCallback) {
+        onProgressCallback(95, 'Finalizing CSV download...');
+      }
       downloadCsvWithBom(blob, filename);
+      if (controller) {
+        controller.update('COMPLETED', 1, 1, 'CSV export complete');
+      }
     } else {
-      if (onProgress) onProgress(50, 'Generating flat records CSV...');
+      if (controller) {
+        controller.update('FORMATTING', 1, 1, 'Generating flat records CSV...');
+      } else if (onProgressCallback) {
+        onProgressCallback(50, 'Generating flat records CSV...');
+      }
       const csvContent = generateFlatRecordsCsv(records, sections, insatSensors, insatMSL);
-      if (onProgress) onProgress(90, 'Preparing download...');
+      if (controller) {
+        controller.update('PREPARING_DOWNLOAD', 1, 1, 'Preparing download...');
+      } else if (onProgressCallback) {
+        onProgressCallback(90, 'Preparing download...');
+      }
       downloadCsvWithBom(csvContent, filename);
+      if (controller) {
+        controller.update('COMPLETED', 1, 1, 'CSV export complete');
+      }
     }
   }
 
-  if (onProgress) onProgress(100, 'CSV export complete');
+  if (controller) {
+    controller.update('COMPLETED', 1, 1, 'CSV export complete');
+  } else if (onProgressCallback) {
+    onProgressCallback(100, 'CSV export complete');
+  }
 }
 
 /**

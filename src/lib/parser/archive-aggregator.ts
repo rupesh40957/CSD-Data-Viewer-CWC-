@@ -10,7 +10,7 @@ import {
 import { StationMaster } from '@/types/station-master';
 import { ArchiveFileInfo, DynamicArchiveCatalog } from './date-extractor';
 import { workerPool, ParseArchiveProgress } from './worker-pool';
-import { isValidStationId } from './csd-parser';
+import { isValidStationId, sanitizeStationId } from './csd-parser';
 
 export interface ArchiveSpanSummary {
   title: string;
@@ -140,7 +140,7 @@ export function mergeParsedCsdFiles(
 
     for (const r of pf.records) {
       allRecords.push(r);
-      const rawId = (r.stationId || '').trim();
+      const rawId = sanitizeStationId(r.stationId || '');
       if (!isValidStationId(rawId)) {
         // Group all corrupt frame noise tokens under a single CORRUPT_FRAME bucket
         const corruptKey = 'CORRUPT_FRAME';
@@ -150,7 +150,7 @@ export function mergeParsedCsdFiles(
         stationRecordMap.get(corruptKey)!.push(r);
         continue;
       }
-      const stId = rawId.toUpperCase();
+      const stId = /^[0-9A-Fa-f]{8}$/.test(rawId) ? rawId.toUpperCase() : rawId;
       if (!stationRecordMap.has(stId)) {
         stationRecordMap.set(stId, []);
       }
@@ -252,7 +252,7 @@ export function mergeParsedCsdFiles(
     goodRecords: recalculatedGood,
     badRecords: recalculatedBad,
     corruptedFieldsRecords: corruptFieldCount,
-    uniqueStations: stations.length,
+    uniqueStations: stations.filter((s) => isValidStationId(s.stationId)).length,
     startTime,
     endTime,
     statusBreakdown: statusCounts,

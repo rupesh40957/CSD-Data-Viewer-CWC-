@@ -11,6 +11,8 @@ import { ExportSections, DEFAULT_EXPORT_SECTIONS } from '../utils/export';
 import { InsatSensorConfig } from '../insat/types';
 import { computeRecordEngineeringValues } from '../insat/compute';
 import { formatCsdTimestamp } from '../parser/timestamp-parser';
+import { createStreamingCsvBlob, downloadCsvWithBom } from './csv-export';
+import { ExportProgressController } from './progress-controller';
 
 export async function exportFlatRecordsSheetJs(
   records: CsdRecord[],
@@ -18,9 +20,36 @@ export async function exportFlatRecordsSheetJs(
   sections: ExportSections = DEFAULT_EXPORT_SECTIONS,
   insatSensors?: InsatSensorConfig[],
   insatMSL: number = 0,
-  onProgress?: (pct: number, stage: string) => void
+  onProgress?: ((pct: number, stage: string) => void) | ExportProgressController
 ): Promise<void> {
-  if (onProgress) onProgress(40, 'Preparing column headers for Excel...');
+  const controller = onProgress instanceof ExportProgressController ? onProgress : null;
+  const onProgressCallback = typeof onProgress === 'function' ? onProgress : null;
+
+  // If records exceed 50,000 (e.g. multi-week or multi-year archives),
+  // V8 in-browser heap cannot construct a single contiguous 300MB XLSX zip without RangeError.
+  // We stream directly into a high-speed UTF-8 CSV (which opens natively in Microsoft Excel).
+  if (records.length > 50000) {
+    if (controller) {
+      controller.update('FORMATTING', 0, records.length, `Streaming ${records.length.toLocaleString()} records via CSV...`);
+    } else if (onProgressCallback) {
+      onProgressCallback(45, `Exporting all ${records.length.toLocaleString()} records via high-speed streaming engine...`);
+    }
+    const csvBlob = await createStreamingCsvBlob(records, sections, insatSensors, insatMSL, onProgress);
+    const csvFilename = filename.replace(/\.xlsx$/i, '.csv');
+    if (controller) {
+      controller.update('PREPARING_DOWNLOAD', records.length, records.length, 'Downloading full archive file...');
+    } else if (onProgressCallback) {
+      onProgressCallback(95, 'Downloading full archive file...');
+    }
+    downloadCsvWithBom(csvBlob, csvFilename);
+    return;
+  }
+
+  if (controller) {
+    controller.update('BUILDING_STRUCTURE', 1, 10, 'Preparing column headers for Excel...');
+  } else if (onProgressCallback) {
+    onProgressCallback(40, 'Preparing column headers for Excel...');
+  }
   await new Promise((r) => setTimeout(r, 0));
 
   // 1. Build column headers
@@ -97,15 +126,22 @@ export async function exportFlatRecordsSheetJs(
     rows.push(row);
 
     if (i % CHUNK_SIZE === 0 || i === total - 1) {
-      if (onProgress) {
-        const pct = 40 + Math.round(((i + 1) / total) * 35);
-        onProgress(pct, `Formatting records: ${i + 1} / ${total}`);
+      if (controller) {
+        controller.checkAborted();
+        controller.update('FORMATTING', i + 1, total, `Formatting records: ${i + 1} / ${total}`);
+      } else if (onProgressCallback) {
+        const pct = 50 + Math.round(((i + 1) / total) * 35);
+        onProgressCallback(pct, `Formatting records: ${i + 1} / ${total}`);
       }
       await new Promise((res) => setTimeout(res, 0));
     }
   }
 
-  if (onProgress) onProgress(78, 'Writing Excel binary buffer...');
+  if (controller) {
+    controller.update('GENERATING_FILE', total, total, 'Writing Excel binary buffer...');
+  } else if (onProgressCallback) {
+    onProgressCallback(88, 'Writing Excel binary buffer...');
+  }
   await new Promise((res) => setTimeout(res, 0));
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -116,23 +152,44 @@ export async function exportFlatRecordsSheetJs(
 
   XLSX.utils.book_append_sheet(wb, ws, 'Records');
 
-  if (onProgress) onProgress(90, 'Preparing file download...');
+  if (controller) {
+    controller.update('PREPARING_DOWNLOAD', total, total, 'Preparing file download...');
+  } else if (onProgressCallback) {
+    onProgressCallback(95, 'Preparing file download...');
+  }
   await new Promise((res) => setTimeout(res, 0));
 
-  const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  const blob = new Blob([excelBuffer], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
+  try {
+    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([excelBuffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
 
-  if (typeof window !== 'undefined') {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    if (typeof window !== 'undefined') {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+  } catch (err) {
+    console.warn('SheetJS in-memory XLSX serialization limit exceeded, falling back to streaming CSV:', err);
+    if (controller) {
+      controller.update('GENERATING_FILE', 85, 100, 'Switching to streaming engine for complete archive export...');
+    } else if (onProgressCallback) {
+      onProgressCallback(85, 'Switching to streaming engine for complete archive export...');
+    }
+    const csvBlob = await createStreamingCsvBlob(records, sections, insatSensors, insatMSL, onProgress);
+    const csvFilename = filename.replace(/\.xlsx$/i, '.csv');
+    if (controller) {
+      controller.update('PREPARING_DOWNLOAD', 100, 100, 'Downloading archive CSV file...');
+    } else if (onProgressCallback) {
+      onProgressCallback(98, 'Downloading archive CSV file...');
+    }
+    downloadCsvWithBom(csvBlob, csvFilename);
   }
 }
 

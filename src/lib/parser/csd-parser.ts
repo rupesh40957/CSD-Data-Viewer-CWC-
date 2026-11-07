@@ -44,19 +44,43 @@ export function decodeCsdBuffer(buffer: ArrayBuffer): string {
 }
 
 /**
+ * Strips leading and trailing non-alphanumeric chars (delimiters like 0xBB/», 0x02, 0xB8, quotes, spaces)
+ */
+export function sanitizeStationId(id: string | null | undefined): string {
+  if (!id) return '';
+  return id.replace(/^[^0-9A-Za-z]+|[^0-9A-Za-z]+$/g, '').trim();
+}
+
+/**
  * Strict validator for CSD Station IDs:
- * Rejects corrupt tokens ($$, frame noise, short numbers, empty strings, etc.)
+ * Accepts:
+ * 1. 8-character hex IDs (standard CWC TDMA datalogger format, e.g. 738B66FA, 7D869DC4)
+ * 2. Enriched station names (letters, alphanumeric, e.g. Baghpat, Mawi, Delhi Rly Bridge)
+ * Rejects corrupt tokens ($$, frame noise, short numbers, shifted sensor fields, etc.)
  */
 export function isValidStationId(id: string | null | undefined): boolean {
   if (!id) return false;
-  const trimmed = id.trim();
-  if (trimmed.length < 3 || trimmed.length > 24) return false;
-  if (trimmed.includes('$$') || trimmed.includes(CORRUPT_VALUE_MARKER)) return false;
-  if (/^(unknown|corrupt|null|undefined|---)$/i.test(trimmed)) return false;
-  if (/^s\d{2}:/i.test(trimmed)) return false; // Sensor reading shifted into station column
-  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return false; // Date shifted into station column
-  if (/^-?\d+(\.\d+)?$/.test(trimmed) && trimmed.length < 5) return false; // Short float
-  return /^[A-Za-z0-9_\-\.\/]+$/.test(trimmed);
+  const clean = sanitizeStationId(id);
+  if (!clean || clean.length < 3 || clean.length > 32) return false;
+  if (clean.includes('$$') || clean.includes(CORRUPT_VALUE_MARKER)) return false;
+  if (/^(unknown|corrupt|null|undefined|---|corrupt_frame)$/i.test(clean)) return false;
+  if (/^s\d{2}:/i.test(clean)) return false; // Sensor reading shifted into station column
+  if (/^\d{4}-\d{2}-\d{2}/.test(clean)) return false; // Date shifted into station column
+  if (/^-?\d+(\.\d+)?$/.test(clean) && clean.length < 7) return false; // Numeric noise
+
+  // 1. Strict 8-character hex station ID (matches 100% of authentic CSD datalogger IDs)
+  if (/^[0-9A-Fa-f]{8}$/.test(clean)) return true;
+
+  // 2. Station name starting with a letter (e.g. Baghpat, Delhi Rly Bridge, Mawi)
+  // Genuine station names consist of alphabetic words, spaces, and hyphens without numbers or protocol tokens
+  if (
+    /^[A-Za-z][A-Za-z\s\-()]{2,30}$/.test(clean) &&
+    !/^(unknown|corrupt|null|undefined|---|offset|quality|status|line|signal|power|lock|unlock|good|bad|corrupt_frame)$/i.test(clean)
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -111,8 +135,11 @@ export function parseCsdContent(
     }
 
     const rawStationId = (fields[FIELD_POSITIONS.STATION_ID] || '').trim();
-    const isStationValid = isValidStationId(rawStationId);
-    const stationId = rawStationId;
+    const cleanStationId = sanitizeStationId(rawStationId);
+    const isStationValid = isValidStationId(cleanStationId);
+    const stationId = isStationValid
+      ? (/^[0-9A-Fa-f]{8}$/.test(cleanStationId) ? cleanStationId.toUpperCase() : cleanStationId)
+      : 'CORRUPT_FRAME';
     const timestampRaw = (fields[FIELD_POSITIONS.TIMESTAMP] || '').trim();
     const timeOffset = (fields[FIELD_POSITIONS.TIME_OFFSET] || '').trim();
     const statusRaw = fields[FIELD_POSITIONS.STATUS] || '';
@@ -207,7 +234,7 @@ export function parseCsdContent(
     records.push(record);
 
     // Grouping by station - only index valid stations, corrupt tokens grouped under CORRUPT_FRAME
-    const groupingKey = isStationValid ? stationId : (rawStationId.length > 0 ? 'CORRUPT_FRAME' : 'UNKNOWN');
+    const groupingKey = isStationValid ? stationId : 'CORRUPT_FRAME';
     if (!stationMap.has(groupingKey)) {
       stationMap.set(groupingKey, []);
     }

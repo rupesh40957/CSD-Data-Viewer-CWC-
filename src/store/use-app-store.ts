@@ -1106,8 +1106,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
           (p) => {
             if (onProgress) {
               onProgress(
-                Math.round(p.percentage * 0.75),
-                `Reading file ${p.processed}/${p.total}: ${p.currentFilename}`
+                Math.round(5 + (p.percentage / 100) * 25),
+                `Reading archive ${p.processed}/${p.total}: ${p.currentFilename}`
               );
             }
           }
@@ -1159,8 +1159,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
           (p) => {
             if (onProgress) {
               onProgress(
-                Math.round(p.percentage * 0.75),
-                `Parsing ${p.processed}/${p.total}: ${p.currentFilename}`
+                Math.round(5 + (p.percentage / 100) * 25),
+                `Parsing archive ${p.processed}/${p.total}: ${p.currentFilename}`
               );
             }
           }

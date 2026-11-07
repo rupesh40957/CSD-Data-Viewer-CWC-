@@ -7,7 +7,7 @@ import { CsdRecord } from '@/types/csd';
 import { InsatSensorConfig } from '../insat/types';
 import { computeRecordEngineeringValues } from '../insat/compute';
 import { MatrixReportModel, StationColumnGroup } from './types';
-import { isValidStationId } from '../parser/csd-parser';
+import { isValidStationId, sanitizeStationId } from '../parser/csd-parser';
 
 /**
  * Format a Date object into official CWC date range format:
@@ -58,6 +58,16 @@ function floorToHour(d: Date): Date {
   return res;
 }
 
+const NORM_CACHE = new Map<string, string>();
+function getNormString(str: string): string {
+  let val = NORM_CACHE.get(str);
+  if (!val) {
+    val = str.toLowerCase().replace(/[\s\-_()]+/g, '');
+    NORM_CACHE.set(str, val);
+  }
+  return val;
+}
+
 /**
  * Resolves calibrated engineering value according to official TDMA INSAT specifications:
  * - AirTemp (s00): (Abs(x) - 400) / 10 (resolution 0.1)
@@ -85,14 +95,14 @@ export function resolveCalibratedSensorValue(
     return engValues[sensorName].value;
   }
 
-  const norm = sensorName.toLowerCase().replace(/[\s\-_()]+/g, '');
+  const norm = getNormString(sensorName);
 
   // 1b. Partial key match in precomputed engValues (only if direct key was not exact)
   if (engValues) {
     for (const key in engValues) {
       const ev = engValues[key];
       if (ev?.isValid && ev.value !== null) {
-        const kNorm = key.toLowerCase().replace(/[\s\-_()]+/g, '');
+        const kNorm = getNormString(key);
         if (kNorm === norm || kNorm.includes(norm) || norm.includes(kNorm)) {
           return ev.value;
         }
@@ -243,8 +253,9 @@ export function buildMatrixReportFromRecords(
   // Group stations preserving order of appearance, strictly filtering out noise tokens
   const stationMap = new Map<string, { stationName: string; stationId: string; wimsCode?: string }>();
   for (const r of filtered) {
-    const stId = String(r.stationId || (r as any).station_id || '').trim();
-    if (!isValidStationId(stId)) continue;
+    const cleanId = sanitizeStationId(String(r.stationId || (r as any).station_id || ''));
+    if (!isValidStationId(cleanId)) continue;
+    const stId = /^[0-9A-Fa-f]{8}$/.test(cleanId) ? cleanId.toUpperCase() : cleanId;
     const key = stId.toUpperCase();
     if (!stationMap.has(key)) {
       stationMap.set(key, {
