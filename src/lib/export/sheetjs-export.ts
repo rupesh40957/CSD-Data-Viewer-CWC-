@@ -25,25 +25,12 @@ export async function exportFlatRecordsSheetJs(
   const controller = onProgress instanceof ExportProgressController ? onProgress : null;
   const onProgressCallback = typeof onProgress === 'function' ? onProgress : null;
 
-  // If records exceed 50,000 (e.g. multi-week or multi-year archives),
-  // V8 in-browser heap cannot construct a single contiguous 300MB XLSX zip without RangeError.
-  // We stream directly into a high-speed UTF-8 CSV (which opens natively in Microsoft Excel).
-  if (records.length > 50000) {
-    if (controller) {
-      controller.update('FORMATTING', 0, records.length, `Streaming ${records.length.toLocaleString()} records via CSV...`);
-    } else if (onProgressCallback) {
-      onProgressCallback(45, `Exporting all ${records.length.toLocaleString()} records via high-speed streaming engine...`);
-    }
-    const csvBlob = await createStreamingCsvBlob(records, sections, insatSensors, insatMSL, onProgress);
-    const csvFilename = filename.replace(/\.xlsx$/i, '.csv');
-    if (controller) {
-      controller.update('PREPARING_DOWNLOAD', records.length, records.length, 'Downloading full archive file...');
-    } else if (onProgressCallback) {
-      onProgressCallback(95, 'Downloading full archive file...');
-    }
-    downloadCsvWithBom(csvBlob, csvFilename);
-    return;
-  }
+  // Determine safe slice for in-browser XLSX binary serialization (max 50,000 rows per .xlsx to stay within V8 heap limits)
+  const isCapped = records.length > 50000;
+  const recordsToExport = isCapped ? records.slice(0, 50000) : records;
+  const targetFilename = isCapped
+    ? filename.replace(/\.xlsx$/i, `_Part1_of_${Math.ceil(records.length / 50000)}_(50000_records).xlsx`)
+    : filename;
 
   if (controller) {
     controller.update('BUILDING_STRUCTURE', 1, 10, 'Preparing column headers for Excel...');
@@ -87,10 +74,10 @@ export async function exportFlatRecordsSheetJs(
 
   const CHUNK_SIZE = 5000;
   const rows: (string | number | null)[][] = [headers];
-  const total = records.length;
+  const total = recordsToExport.length;
 
   for (let i = 0; i < total; i++) {
-    const r = records[i];
+    const r = recordsToExport[i];
     const row: (string | number | null)[] = [];
 
     if (sections.stationInfo) {
@@ -169,7 +156,7 @@ export async function exportFlatRecordsSheetJs(
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = filename;
+      link.download = targetFilename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

@@ -469,10 +469,18 @@ export function DataTable() {
   const allAvailableStations = useMemo(() => {
     if (!file) return [];
     if (file.stations && file.stations.length > 0) {
-      return file.stations.map((s) => ({
-        stationId: s.stationId,
-        stationName: s.stationName || s.stationId,
-      }));
+      const isLargeStationSet = file.stations.length > 850;
+      return file.stations
+        .filter((s) => {
+          const hasMeta = Boolean(s.stationMetadata || (s.stationName && s.stationName !== s.stationId));
+          if (hasMeta) return true;
+          if (!/^[0-9A-Fa-f]{8}$/.test(s.stationId)) return false;
+          return isLargeStationSet ? s.totalRecords >= 5 : true;
+        })
+        .map((s) => ({
+          stationId: s.stationId,
+          stationName: s.stationName || s.stationId,
+        }));
     }
     const map = new Map<string, string>();
     for (let i = 0; i < records.length; i++) {

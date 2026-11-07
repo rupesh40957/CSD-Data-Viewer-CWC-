@@ -189,6 +189,83 @@ export function resolveCalibratedSensorValue(
 }
 
 /**
+ * Pre-compiles an ultra-fast sensor value extractor for a given sensor name.
+ * Avoids 2+ million regex checks and string lowercasing loops per export.
+ */
+export function buildSensorValueExtractor(
+  sensorName: string,
+  insatMSL: number
+): (r: CsdRecord, engValues: Record<string, any>) => string | number {
+  const norm = getNormString(sensorName);
+
+  if (norm.includes('reportingtime')) {
+    return (r) => formatTelemetryTimestamp(r.timestamp);
+  }
+  if (norm.includes('gps') || norm.includes('status')) {
+    return (r) => (r.status === 'L' ? 'Lock' : r.status === 'U' ? 'Unlock' : (r.status || 'Lock'));
+  }
+  if (norm.includes('raindaily') || norm.includes('c3')) {
+    return (r, eng) => {
+      if (eng && eng[sensorName]?.isValid && eng[sensorName].value !== null) return eng[sensorName].value;
+      if (r.c3 !== null && r.c3 !== undefined) return r.c3;
+      const x = r.sensorMap?.c3?.[0];
+      return x !== undefined && x !== null ? x : '---';
+    };
+  }
+  if (norm.includes('rainfall') || norm.includes('c2')) {
+    return (r, eng) => {
+      if (eng && eng[sensorName]?.isValid && eng[sensorName].value !== null) return eng[sensorName].value;
+      if (r.c2 !== null && r.c2 !== undefined) return Number((r.c2 / 2).toFixed(1));
+      const x = r.sensorMap?.c2?.[0];
+      return x !== undefined && x !== null ? Number((x / 2).toFixed(1)) : '---';
+    };
+  }
+  if (norm.includes('battery') || norm.includes('c1')) {
+    return (r, eng) => {
+      if (eng && eng[sensorName]?.isValid && eng[sensorName].value !== null) return eng[sensorName].value;
+      if (r.c1 !== null && r.c1 !== undefined) return Number((r.c1 / 10).toFixed(1));
+      const c1 = r.sensorMap?.c1?.[0];
+      if (c1 !== undefined && c1 !== null) return Number((c1 / 10).toFixed(1));
+      if (r.s17 !== null && r.s17 !== undefined) return Number((r.s17 / 10).toFixed(1));
+      const s17 = r.sensorMap?.s17?.[0];
+      if (s17 !== undefined && s17 !== null) return Number((s17 / 10).toFixed(1));
+      return '---';
+    };
+  }
+  if (norm.includes('waterlevel') || norm.includes('water') || norm.includes('s08') || norm.includes('s16')) {
+    return (r, eng) => {
+      if (eng && eng[sensorName]?.isValid && eng[sensorName].value !== null) return eng[sensorName].value;
+      if (r.s16 !== null && r.s16 !== undefined && r.s16 > 0) return Number((r.s16 + insatMSL).toFixed(3));
+      const s08 = r.sensorMap?.s08?.[0];
+      if (s08 !== undefined && s08 !== null) {
+        const s09 = r.sensorMap?.s09?.[0];
+        const dec = s09 !== undefined && s09 !== null ? (s09 >= 100 ? s09 / 1000 : s09 >= 1 ? s09 / 100 : s09) : 0;
+        return Number(((s08 + dec) + insatMSL).toFixed(3));
+      }
+      return '---';
+    };
+  }
+  if (norm.includes('airtemp') || norm.includes('s00')) {
+    return (r, eng) => {
+      if (eng && eng[sensorName]?.isValid && eng[sensorName].value !== null) return eng[sensorName].value;
+      const s00 = r.sensorMap?.s00?.[0];
+      if (s00 !== undefined && s00 !== null) return Number(((Math.abs(s00) - 400) / 10).toFixed(1));
+      return '---';
+    };
+  }
+  if (norm.includes('humidity') || norm.includes('s07')) {
+    return (r, eng) => {
+      if (eng && eng[sensorName]?.isValid && eng[sensorName].value !== null) return eng[sensorName].value;
+      const s07 = r.sensorMap?.s07?.[0];
+      if (s07 !== undefined && s07 !== null) return Math.round(Math.abs(s07) / 10);
+      return '---';
+    };
+  }
+
+  return (r, eng) => resolveCalibratedSensorValue(sensorName, r, eng, insatMSL);
+}
+
+/**
  * Build MatrixReportModel from CSD records and INSAT sensor configuration.
  */
 export function buildMatrixReportFromRecords(
@@ -238,142 +315,170 @@ export function buildMatrixReportFromRecords(
   const periodText = `${startStr} To ${endStr}`;
   const title = `Telemetry Data Received at Central Receiving Station during \r\n${periodText}`;
 
-  // 3. Discover unique stations and their sensors
-  const enabledSensors = insatSensors && insatSensors.length > 0
+  // 3. Discover unique stations and their sensors (deduplicated by sensor name)
+  const seenSensorNames = new Set<string>();
+  const rawSensorsList = insatSensors && insatSensors.length > 0
     ? insatSensors.filter((s) => s.enabled)
     : [
-        { sensorName: 'Rainfall (INSAT)', unit: 'mm', rightDigit: 1 },
-        { sensorName: 'RainDaily (INSAT)', unit: 'mm', rightDigit: 0 },
-        { sensorName: 'WaterLevel (INSAT)', unit: 'mts.', rightDigit: 3 },
-        { sensorName: 'Battery (INSAT)', unit: 'Volt', rightDigit: 1 },
-        { sensorName: 'ReportingTime (INSAT)', unit: '', rightDigit: 0 },
-        { sensorName: 'GPSstatus', unit: '', rightDigit: 0 },
-      ];
-
-  // Group stations preserving order of appearance, strictly filtering out noise tokens
-  const stationMap = new Map<string, { stationName: string; stationId: string; wimsCode?: string }>();
-  for (const r of filtered) {
-    const cleanId = sanitizeStationId(String(r.stationId || (r as any).station_id || ''));
-    if (!isValidStationId(cleanId)) continue;
-    const stId = /^[0-9A-Fa-f]{8}$/.test(cleanId) ? cleanId.toUpperCase() : cleanId;
-    const key = stId.toUpperCase();
-    if (!stationMap.has(key)) {
-      stationMap.set(key, {
-        stationId: stId,
-        stationName: r.stationName || (r as any).station_name || stId,
-        wimsCode: r.stationMetadata?.district || '',
-      });
-    }
-  }
-
-  // 4. Build column groups
-  const stationGroups: StationColumnGroup[] = [];
-  let currentColIndex = 1; // Col 0 is Date and Time (IST)
-
-  stationMap.forEach((st) => {
-    const sensorsForStation = enabledSensors.map((s, idx) => ({
-      name: s.sensorName,
-      unit: s.unit || '',
-      key: s.sensorName,
-      colIndex: currentColIndex + idx,
-      resolution: s.rightDigit,
-    }));
-
-    stationGroups.push({
-      stationName: st.stationName,
-      stationId: st.stationId,
-      wimsCode: st.wimsCode,
-      startColIndex: currentColIndex,
-      colSpan: sensorsForStation.length,
-      sensors: sensorsForStation,
-    });
-
-    currentColIndex += sensorsForStation.length;
+      { sensorName: 'Rainfall (INSAT)', unit: 'mm', rightDigit: 1 },
+      { sensorName: 'RainDaily (INSAT)', unit: 'mm', rightDigit: 0 },
+      { sensorName: 'WaterLevel (INSAT)', unit: 'mts.', rightDigit: 3 },
+      { sensorName: 'Battery (INSAT)', unit: 'Volt', rightDigit: 1 },
+      { sensorName: 'ReportingTime (INSAT)', unit: '', rightDigit: 0 },
+      { sensorName: 'GPSstatus', unit: '', rightDigit: 0 },
+    ];
+  const enabledSensors = rawSensorsList.filter((s) => {
+    const k = s.sensorName.trim().toLowerCase();
+    if (seenSensorNames.has(k)) return false;
+    seenSensorNames.add(k);
+    return true;
   });
 
-  const totalColumns = currentColIndex;
+  // Group stations preserving order of appearance, strictly filtering out noise tokens
+  const stationMap = new Map<string, { stationName: string; stationId: string; wimsCode?: string; recordCount: number }>();
+  for (const r of filtered) {
+    const cleanId = sanitizeStationId(String(r.stationId || (r as any).station_id || ''));
+    if (!cleanId || cleanId === 'CORRUPT_FRAME' || cleanId.toLowerCase().includes('unknown')) continue;
+    const isHex = /^[0-9A-Fa-f]{8}$/.test(cleanId);
+    const hasMeta = Boolean(r.stationMetadata?.stationName || (r.stationName && r.stationName !== cleanId));
+    if (!isHex && !hasMeta) continue;
 
-  // 5. Build timeline (hourly buckets between minDate and maxDate)
-  const timestamps: string[] = [];
-  const timeBuckets = new Map<string, CsdRecord[]>();
-
-  if (minDate && maxDate) {
-    const diffHours = (maxDate.getTime() - minDate.getTime()) / (1000 * 60 * 60);
-    // Continuous hourly timeline up to 5+ years (50,000 hours) takes < 2ms in JS
-    if (diffHours >= 0 && diffHours <= 50000) {
-      const curr = floorToHour(minDate);
-      const end = floorToHour(maxDate);
-
-      while (curr <= end) {
-        const tsStr = formatTelemetryTimestamp(curr);
-        timestamps.push(tsStr);
-        timeBuckets.set(tsStr, []);
-        curr.setUTCHours(curr.getUTCHours() + 1);
-      }
-    }
-  }
-
-  const seenTimestamps = new Set<string>(timestamps);
-
-  // Map each record to its hourly bucket using O(1) set check
-  for (let i = 0; i < filtered.length; i++) {
-    const r = filtered[i];
-    const hourTs = getHourBucketKey(r.timestamp);
-    const bucket = timeBuckets.get(hourTs);
-    if (bucket) {
-      bucket.push(r);
-    } else {
-      timeBuckets.set(hourTs, [r]);
-      if (!seenTimestamps.has(hourTs)) {
-        seenTimestamps.add(hourTs);
-        timestamps.push(hourTs);
-      }
-    }
-  }
-
-  // Ensure timestamps are sorted chronologically
-  timestamps.sort();
-
-  // 6. Build 2D Grid
-  const grid = new Map<string, (string | number | null)[]>();
-
-  // Map for fast O(1) station lookup
-  const stationGroupMap = new Map<string, StationColumnGroup>();
-  for (const group of stationGroups) {
-    stationGroupMap.set(group.stationId.toUpperCase(), group);
-  }
-
-  for (const ts of timestamps) {
-    const rowVals = new Array(totalColumns).fill('---');
-    rowVals[0] = ts; // Col 0 is Date
-
-    const bucketRecords = timeBuckets.get(ts) || [];
-    for (const r of bucketRecords) {
-      const stId = String(r.stationId || (r as any).station_id || 'UNKNOWN').toUpperCase();
-      const group = stationGroupMap.get(stId);
-      if (!group) continue;
-
-      const engValues = insatSensors
-        ? computeRecordEngineeringValues(insatSensors, r, insatMSL)
-        : {};
-
-      for (const sensor of group.sensors) {
-        rowVals[sensor.colIndex] = resolveCalibratedSensorValue(sensor.name, r, engValues, insatMSL);
+    const stId = isHex ? cleanId.toUpperCase() : cleanId;
+    const key = stId.toUpperCase();
+      const existing = stationMap.get(key);
+      if (!existing) {
+        stationMap.set(key, {
+          stationId: stId,
+          stationName: r.stationName || (r as any).station_name || stId,
+          wimsCode: r.stationMetadata?.district || '',
+          recordCount: 1,
+        });
+      } else {
+        existing.recordCount++;
       }
     }
 
-    grid.set(ts, rowVals);
-  }
+    // If station count is unexpectedly high due to raw archive noise, prune one-off noise tokens
+    if (stationMap.size > 850) {
+      for (const [k, st] of stationMap.entries()) {
+        const hasMeta = Boolean(st.wimsCode || (st.stationName && st.stationName !== st.stationId));
+        if (st.recordCount < 5 && !hasMeta) {
+          stationMap.delete(k);
+        }
+      }
+    }
 
-  return {
-    title,
-    periodText,
-    startDate: minDate,
-    endDate: maxDate,
-    totalColumns,
-    dateColumnHeader: 'Date and Time (IST)',
-    stationGroups,
-    timestamps,
-    grid,
-  };
-}
+    // 4. Build column groups
+    const stationGroups: StationColumnGroup[] = [];
+    let currentColIndex = 1; // Col 0 is Date and Time (IST)
+
+    stationMap.forEach((st) => {
+      const sensorsForStation = enabledSensors.map((s, idx) => ({
+        name: s.sensorName,
+        unit: s.unit || '',
+        key: s.sensorName,
+        colIndex: currentColIndex + idx,
+        resolution: s.rightDigit,
+        extractor: buildSensorValueExtractor(s.sensorName, insatMSL),
+      }));
+
+      stationGroups.push({
+        stationName: st.stationName,
+        stationId: st.stationId,
+        wimsCode: st.wimsCode,
+        startColIndex: currentColIndex,
+        colSpan: sensorsForStation.length,
+        sensors: sensorsForStation,
+      });
+
+      currentColIndex += sensorsForStation.length;
+    });
+
+    const totalColumns = currentColIndex;
+
+    // 5. Build timeline (hourly buckets between minDate and maxDate)
+    const timestamps: string[] = [];
+    const timeBuckets = new Map<string, CsdRecord[]>();
+
+    if (minDate && maxDate) {
+      const diffHours = (maxDate.getTime() - minDate.getTime()) / (1000 * 60 * 60);
+      // Continuous hourly timeline up to 5+ years (50,000 hours) takes < 2ms in JS
+      if (diffHours >= 0 && diffHours <= 50000) {
+        const curr = floorToHour(minDate);
+        const end = floorToHour(maxDate);
+
+        while (curr <= end) {
+          const tsStr = formatTelemetryTimestamp(curr);
+          timestamps.push(tsStr);
+          timeBuckets.set(tsStr, []);
+          curr.setUTCHours(curr.getUTCHours() + 1);
+        }
+      }
+    }
+
+    const seenTimestamps = new Set<string>(timestamps);
+
+    // Map each record to its hourly bucket using O(1) set check
+    for (let i = 0; i < filtered.length; i++) {
+      const r = filtered[i];
+      const hourTs = getHourBucketKey(r.timestamp);
+      const bucket = timeBuckets.get(hourTs);
+      if (bucket) {
+        bucket.push(r);
+      } else {
+        timeBuckets.set(hourTs, [r]);
+        if (!seenTimestamps.has(hourTs)) {
+          seenTimestamps.add(hourTs);
+          timestamps.push(hourTs);
+        }
+      }
+    }
+
+    // Ensure timestamps are sorted chronologically
+    timestamps.sort();
+
+    // 6. Build 2D Grid
+    const grid = new Map<string, (string | number | null)[]>();
+
+    // Map for fast O(1) station lookup
+    const stationGroupMap = new Map<string, StationColumnGroup>();
+    for (const group of stationGroups) {
+      stationGroupMap.set(group.stationId.toUpperCase(), group);
+    }
+
+    for (const ts of timestamps) {
+      const rowVals = new Array(totalColumns).fill('---');
+      rowVals[0] = ts; // Col 0 is Date
+
+      const bucketRecords = timeBuckets.get(ts) || [];
+      for (const r of bucketRecords) {
+        const stId = String(r.stationId || (r as any).station_id || 'UNKNOWN').toUpperCase();
+        const group = stationGroupMap.get(stId);
+        if (!group) continue;
+
+        const engValues = insatSensors
+          ? computeRecordEngineeringValues(insatSensors, r, insatMSL)
+          : {};
+
+        for (const sensor of group.sensors) {
+          rowVals[sensor.colIndex] = (sensor as any).extractor
+            ? (sensor as any).extractor(r, engValues)
+            : resolveCalibratedSensorValue(sensor.name, r, engValues, insatMSL);
+        }
+      }
+
+      grid.set(ts, rowVals);
+    }
+
+    return {
+      title,
+      periodText,
+      startDate: minDate,
+      endDate: maxDate,
+      totalColumns,
+      dateColumnHeader: 'Date and Time (IST)',
+      stationGroups,
+      timestamps,
+      grid,
+    };
+  }

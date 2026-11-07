@@ -75,11 +75,22 @@ export function isValidStationId(id: string | null | undefined): boolean {
   // Genuine station names consist of alphabetic words, spaces, and hyphens without numbers or protocol tokens
   if (
     /^[A-Za-z][A-Za-z\s\-()]{2,30}$/.test(clean) &&
-    !/^(unknown|corrupt|null|undefined|---|offset|quality|status|line|signal|power|lock|unlock|good|bad|corrupt_frame)$/i.test(clean)
+    !/^(unknown|corrupt|null|undefined|---|offset|quality|status|line|signal|power|lock|unlock|good|bad|corrupt_frame|error|sync|data|temp|rain|batt|test|volt|station|datalogger|header|record)$/i.test(clean)
   ) {
     return true;
   }
 
+  return false;
+}
+
+/**
+ * Validates whether a station identifier represents a genuine physical datalogger station.
+ */
+export function isAuthenticStationId(id: string | null | undefined, hasMetadata?: boolean): boolean {
+  if (!id) return false;
+  const clean = sanitizeStationId(id);
+  if (/^[0-9A-Fa-f]{8}$/.test(clean)) return true;
+  if (hasMetadata && /^[A-Za-z][A-Za-z0-9\s\-()]{2,30}$/.test(clean)) return true;
   return false;
 }
 

@@ -252,7 +252,12 @@ export function mergeParsedCsdFiles(
     goodRecords: recalculatedGood,
     badRecords: recalculatedBad,
     corruptedFieldsRecords: corruptFieldCount,
-    uniqueStations: stations.filter((s) => isValidStationId(s.stationId)).length,
+    uniqueStations: stations.filter(
+      (s) =>
+        Boolean(s.stationMetadata) ||
+        (s.stationName && s.stationName !== s.stationId) ||
+        (/^[0-9A-Fa-f]{8}$/.test(s.stationId) && (s.totalRecords >= 5 || stations.length <= 850))
+    ).length,
     startTime,
     endTime,
     statusBreakdown: statusCounts,

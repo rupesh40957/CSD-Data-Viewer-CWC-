@@ -20,73 +20,80 @@ function escapeHtml(str: unknown): string {
     .replace(/'/g, '&#039;');
 }
 
-const MAX_PRINT_STATIONS = 20;
+const MAX_PRINT_STATIONS = 10;
 const MAX_PRINT_ROWS = 500;
 
 /**
- * Generates clean, print-ready HTML for the CWC Multi-Station Matrix Report
+ * Generates clean, print-ready HTML for the CWC Multi-Station Matrix Report.
+ * Renders dedicated station-by-station landscape pages with zero column clipping.
  */
 export function generateMatrixPrintHtml(model: MatrixReportModel): string {
   const stationGroups = model.stationGroups.slice(0, MAX_PRINT_STATIONS);
   const isCapped = model.stationGroups.length > MAX_PRINT_STATIONS;
-
-  // 1. Station headers
-  const stationThs = stationGroups
-    .map(
-      (g) =>
-        `<th class="station" colspan="${g.colSpan}">${escapeHtml(g.stationName)}</th>`
-    )
-    .join('');
-
-  // 2. Sensor headers
-  const sensorThs = stationGroups
-    .flatMap((g) =>
-      g.sensors.map((s) => `<th class="sensor">${escapeHtml(s.name)}</th>`)
-    )
-    .join('');
-
-  // 3. WIMS Station Code headers
-  const wimsThs = stationGroups
-    .map(
-      (g) =>
-        `<th class="meta" colspan="${g.colSpan}">${escapeHtml(g.wimsCode || '---')}</th>`
-    )
-    .join('');
-
-  // 4. Datalogger ID headers
-  const idThs = stationGroups
-    .map(
-      (g) =>
-        `<th class="meta id" colspan="${g.colSpan}">${escapeHtml(g.stationId)}</th>`
-    )
-    .join('');
-
-  // 5. Sensor Units
-  const unitThs = stationGroups
-    .flatMap((g) =>
-      g.sensors.map((s) => `<th class="unit">${escapeHtml(s.unit || '---')}</th>`)
-    )
-    .join('');
-
-  // 6. Data rows (Capped for printable paper)
   const printTimestamps = model.timestamps.slice(0, MAX_PRINT_ROWS);
-  const dataRows = printTimestamps
-    .map((ts) => {
-      const rowVals = model.grid.get(ts) || [ts];
-      const cells: string[] = [`<td class="time">${escapeHtml(ts)}</td>`];
-      for (const g of stationGroups) {
-        for (const s of g.sensors) {
-          const v = rowVals[s.colIndex];
-          const valStr = v !== undefined && v !== null ? String(v) : '---';
-          const isMuted = valStr === '---' || valStr === '-40' || valStr === '0';
-          cells.push(`<td class="${isMuted ? 'muted' : ''}">${escapeHtml(valStr)}</td>`);
-        }
-      }
-      return `<tr>${cells.join('')}</tr>`;
-    })
+
+  // Generate a dedicated printable table per station to guarantee zero column clipping on A4 paper
+  const stationBlocks = stationGroups.map((g, gIdx) => {
+    // Deduplicate sensors for this station
+    const seenKeys = new Set<string>();
+    const uniqueSensors = g.sensors.filter((s) => {
+      const k = s.name.trim().toLowerCase();
+      if (seenKeys.has(k)) return false;
+      seenKeys.add(k);
+      return true;
+    });
+
+    const sensorHeaders = uniqueSensors
+      .map(
+        (s) =>
+          `<th class="sensor">${escapeHtml(s.name)}${s.unit ? `<br><span class="unit-tag">(${escapeHtml(s.unit)})</span>` : ''}</th>`
+      )
+      .join('');
+
+            const dataRows = printTimestamps
+              .map((ts) => {
+                const rowVals = model.grid.get(ts) || [ts];
+                const cells: string[] = [`<td class="time">${escapeHtml(ts)}</td>`];
+                for (const s of uniqueSensors) {
+                  const v = rowVals[s.colIndex];
+                  const valStr = v !== undefined && v !== null ? String(v) : '---';
+                  const isMuted = valStr === '---' || valStr === '-40' || valStr === '0';
+                  cells.push(`<td class="${isMuted ? 'muted' : ''}">${escapeHtml(valStr)}</td>`);
+                }
+    return `<tr>${cells.join('')}</tr>`;
+  })
     .join('\n');
 
-  return `<!DOCTYPE html>
+  return `
+      <div class="station-page-block ${gIdx < stationGroups.length - 1 ? 'has-page-break' : ''}">
+        <div class="header-banner">
+          <div class="header-title">Central Water Commission — Telemetry Data Report</div>
+          <div class="header-period">${escapeHtml(model.periodText)}</div>
+        </div>
+
+        <div class="station-meta-banner">
+          <div class="meta-item"><span class="meta-label">Station:</span> <strong class="meta-val">${escapeHtml(g.stationName)}</strong></div>
+          <div class="meta-item"><span class="meta-label">Datalogger ID:</span> <span class="meta-mono">${escapeHtml(g.stationId)}</span></div>
+          ${g.wimsCode ? `<div class="meta-item"><span class="meta-label">WIMS / District:</span> <span class="meta-val">${escapeHtml(g.wimsCode)}</span></div>` : ''}
+          <div class="meta-item meta-page"><span class="meta-label">Station ${gIdx + 1} of ${stationGroups.length}</span></div>
+        </div>
+
+        <table class="station-table">
+          <thead>
+            <tr>
+              <th class="time-header">Date and Time (IST)</th>
+              ${sensorHeaders}
+            </tr>
+          </thead>
+          <tbody>
+            ${dataRows}
+          </tbody>
+        </table>
+      </div>
+    `;
+}).join('\n');
+
+return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -94,7 +101,7 @@ export function generateMatrixPrintHtml(model: MatrixReportModel): string {
   <style>
     @page {
       size: landscape;
-      margin: 8mm;
+      margin: 10mm;
     }
     *, *::before, *::after {
       box-sizing: border-box;
@@ -108,25 +115,57 @@ export function generateMatrixPrintHtml(model: MatrixReportModel): string {
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
+    .has-page-break {
+      page-break-after: always;
+      break-after: page;
+      margin-bottom: 24px;
+    }
     .header-banner {
       text-align: center;
       border: 2px solid #000000;
-      padding: 10px 14px;
-      margin-bottom: 10px;
+      padding: 8px 12px;
+      margin-bottom: 8px;
       background: #ffffff;
       border-radius: 4px;
     }
     .header-title {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 800;
       color: #000000;
       letter-spacing: -0.01em;
     }
     .header-period {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 800;
       color: #002060;
-      margin-top: 3px;
+      margin-top: 2px;
+    }
+    .station-meta-banner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #1e3a5f;
+      color: #ffffff;
+      padding: 6px 12px;
+      border-radius: 4px;
+      margin-bottom: 8px;
+      font-size: 11px;
+    }
+    .meta-item {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .meta-label {
+      color: #94a3b8;
+      font-weight: 500;
+    }
+    .meta-mono {
+      font-family: monospace;
+      font-weight: 700;
+      background: #0f233d;
+      padding: 2px 6px;
+      border-radius: 3px;
     }
     .print-notice {
       background: #f8fafc;
@@ -138,14 +177,10 @@ export function generateMatrixPrintHtml(model: MatrixReportModel): string {
       border-radius: 4px;
       color: #334155;
     }
-    .table-container {
-      width: 100%;
-      overflow-x: auto;
-    }
-    table {
+    table.station-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 8.5px;
+      font-size: 9px;
       table-layout: auto;
     }
     th, td {
@@ -160,36 +195,21 @@ export function generateMatrixPrintHtml(model: MatrixReportModel): string {
       font-weight: 700;
       color: #0f172a;
       font-size: 9px;
-    }
-    th.station {
-      background: #1e3a5f !important;
-      color: #ffffff !important;
-      font-weight: 700;
-      font-size: 9.5px;
-      padding: 6px 4px;
+      width: 140px;
+      min-width: 130px;
     }
     th.sensor {
       background: #e2e8f0 !important;
       color: #0f172a !important;
       font-weight: 700;
-      font-size: 8px;
-    }
-    th.meta {
-      background: #f8fafc !important;
-      color: #475569 !important;
-      font-size: 8px;
-      font-weight: 600;
-    }
-    th.meta.id {
-      font-family: monospace;
-      color: #0f172a;
       font-size: 8.5px;
+      padding: 5px 4px;
     }
-    th.unit {
-      background: #f1f5f9 !important;
-      color: #64748b !important;
-      font-size: 8px;
+    .unit-tag {
+      font-size: 7.5px;
       font-style: italic;
+      color: #475569;
+      font-weight: 500;
     }
     td.time {
       font-family: monospace;
@@ -222,44 +242,14 @@ export function generateMatrixPrintHtml(model: MatrixReportModel): string {
   </style>
 </head>
 <body>
-  <div class="header-banner">
-    <div class="header-title">Telemetry Data Received at Central Receiving Station during</div>
-    <div class="header-period">${escapeHtml(model.periodText)}</div>
-  </div>
-
-  ${
-    isCapped
-      ? `<div class="print-notice no-print">
-          <strong>Print Document Notice:</strong> Displaying first ${MAX_PRINT_STATIONS} of ${model.stationGroups.length} stations formatted for landscape paper. For the complete multi-year archive of all stations, please use <strong>Excel (.xlsx)</strong> or <strong>CSV</strong> export.
+  ${isCapped
+    ? `<div class="print-notice no-print">
+          <strong>Print Document Notice:</strong> Displaying first ${MAX_PRINT_STATIONS} of ${model.stationGroups.length} stations formatted as dedicated landscape pages. For the complete multi-year archive of all stations, please use <strong>Excel (.xlsx)</strong> or <strong>CSV</strong> export.
         </div>`
-      : ''
+    : ''
   }
 
-  <div class="table-container">
-    <table>
-      <thead>
-        <!-- Row 1: Station Names -->
-        <tr>
-          <th rowspan="4" class="time-header">${escapeHtml(model.dateColumnHeader)}</th>
-          ${stationThs}
-        </tr>
-        <!-- Row 2: Sensors -->
-        <tr>${sensorThs}</tr>
-        <!-- Row 3: WIMS Code -->
-        <tr>${wimsThs}</tr>
-        <!-- Row 4: Datalogger ID -->
-        <tr>${idThs}</tr>
-        <!-- Row 5: Sensor Unit -->
-        <tr>
-          <th class="time-header" style="font-size: 8px;">Sensor Unit</th>
-          ${unitThs}
-        </tr>
-      </thead>
-      <tbody>
-        ${dataRows}
-      </tbody>
-    </table>
-  </div>
+  ${stationBlocks}
 </body>
 </html>`;
 }

@@ -77,6 +77,31 @@ function setupMatrixHeaders(
 ): void {
   const safeCols = Math.min(totalCols, 16384);
 
+  // Pre-calculate boundary column set for station divisions
+  const boundaryColSet = new Set<number>();
+  let colScan = 1;
+  for (const group of stationGroups) {
+    colScan += group.colSpan;
+    boundaryColSet.add(colScan);
+  }
+
+  // Pre-configure data column defaults before writing header rows
+  // This allows header rows to specify custom fonts/borders while rows 7..N inherit efficiently
+  ws.getColumn(1).width = 20;
+  for (let c = 2; c <= safeCols; c++) {
+    const col = ws.getColumn(c);
+    col.numFmt = '#,##0.00';
+    col.alignment = { horizontal: 'right', vertical: 'middle' };
+    col.font = FONT_DATA_DEFAULT;
+    const isBoundary = boundaryColSet.has(c);
+    col.border = {
+      top: THIN_BORDER,
+      bottom: THIN_BORDER,
+      left: THIN_BORDER,
+      right: isBoundary ? { style: 'medium', color: { argb: COLOR_BORDER_SEP } } : THIN_BORDER,
+    };
+  }
+
   // Row 1: Report Title & Period
   const row1 = ws.getRow(1);
   row1.height = 48;
@@ -439,7 +464,7 @@ export async function createMatrixExcelWorkbook(
           continue;
         }
 
-        // ─── Balanced Mode: Bulk row insertion + station boundary separation + numbers ───
+        // ─── Balanced Mode: High-speed bulk row insertion + column styling (Zero RAM bloat) ───
         if (speedMode === 'balanced') {
           const isOdd = rIdx % 2 === 1;
           const rowFill = isOdd ? FILL_ZEBRA_ODD : FILL_ZEBRA_EVEN;
@@ -451,6 +476,7 @@ export async function createMatrixExcelWorkbook(
             }
           }
           row.values = rowVals;
+          row.fill = rowFill;
 
           const dateCell = row.getCell(1);
           dateCell.fill = rowFill;
@@ -463,33 +489,6 @@ export async function createMatrixExcelWorkbook(
             right: { style: 'medium', color: { argb: COLOR_BORDER_SEP } },
           };
 
-          let curCellCol = 2;
-          for (const group of partitionGroups) {
-            if (curCellCol > 16384) break;
-            for (const s of group.sensors) {
-              if (curCellCol > 16384) break;
-              const rawVal = rowData[s.colIndex];
-              const isBoundary = boundaryColSet.has(curCellCol);
-
-              const cell = row.getCell(curCellCol);
-              cell.fill = rowFill;
-              cell.border = isBoundary ? CELL_BORDER_BOUNDARY : CELL_BORDER_NORMAL;
-
-              if (typeof rawVal === 'number') {
-                cell.font = FONT_DATA_DEFAULT;
-                cell.alignment = ALIGN_RIGHT;
-                cell.numFmt = Number.isInteger(rawVal) ? '#,##0' : '#,##0.00';
-              } else if (rawVal === '---' || rawVal === undefined || rawVal === null) {
-                cell.font = FONT_EMPTY_DEFAULT;
-                cell.alignment = ALIGN_CENTER;
-              } else {
-                cell.font = FONT_DATA_DEFAULT;
-                cell.alignment = ALIGN_CENTER;
-              }
-
-              curCellCol++;
-            }
-          }
           currentExcelRow++;
           continue;
         }
